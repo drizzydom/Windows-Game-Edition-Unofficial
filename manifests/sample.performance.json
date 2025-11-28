@@ -1,0 +1,63 @@
+{
+  "schemaVersion": "0.1.0",
+  "metadata": {
+    "id": "performance-core",
+    "name": "Performance Core",
+    "category": "Performance",
+    "description": "Disables disk prefetching and legacy background helpers that slow SSD based gaming rigs.",
+    "defaultState": "preview",
+    "tags": ["default"]
+  },
+  "tweaks": [
+    {
+      "id": "svc-sysmain",
+      "name": "SysMain Service",
+      "category": "Disk and Memory",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": ["win11-enterprise"]
+      },
+      "defaultBehavior": "SysMain (formerly Superfetch) watches app usage and preloads data into RAM to improve launch times, which can consume memory and disk IO on gaming setups with SSDs.",
+      "whenDisabled": "Stops SysMain and sets the startup type to Disabled so Windows leaves disks alone during gaming sessions.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["performance", "storage"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "SysMain",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "SysMain",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Manual"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "SysMain",
+            "action": "SetStartup",
+            "startupType": "Manual"
+          },
+          {
+            "type": "service",
+            "name": "SysMain",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "Skip this tweak on machines that still rely on HDDs for most games."
+    }
+  ]
+}
