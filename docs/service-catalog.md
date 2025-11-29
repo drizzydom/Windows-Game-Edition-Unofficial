@@ -51,6 +51,7 @@ This catalog documents the Windows 10 and Windows 11 services, scheduled tasks, 
 | Capability Access Manager (`camsvc`) | Manages app capability access | Keep | Medium | UWP permission broker. |
 | Time Broker (`TimeBrokerSvc`) | Background task timing | Keep | Medium | UWP background tasks. |
 | Windows Security Service (`SecurityHealthService`) | Security dashboard | Keep | High | Anti cheat trusts it. |
+| System Guard Runtime Monitor (`SgrmBroker`) | Virtualization based security monitor | Keep | High | Required when Credential Guard or Memory Integrity is enabled. |
 
 ## Performance Drains (Good Candidates for Presets)
 
@@ -175,6 +176,11 @@ This catalog documents the Windows 10 and Windows 11 services, scheduled tasks, 
 | Embedded Mode (`embeddedmode`) | IoT/kiosk embedded features | Disable | Low | Not relevant. |
 | Workplace Join tasks (`\Microsoft\Windows\Workplace Join\*`) | Workplace join | Disable | Low | Enterprise only. |
 | Work Folders tasks (`\Microsoft\Windows\Work Folders\*`) | Work Folders sync | Disable | Low | Enterprise only. |
+| BitLocker Drive Encryption Service (`BDESVC`) | Full disk encryption | Keep if BitLocker is enabled | Medium | Present on Pro/Enterprise/Education; disable only when encryption is not in use. |
+| BranchCache (`PeerDistSvc`) | LAN content caching | Disable | Low | Exists on Pro/Enterprise/Education; pointless on standalone rigs. |
+| AppLocker (`AppIDSvc`) | Application whitelisting | Disable | Low | Enterprise/Education only; harshly restricts unsigned games if left configured. |
+| Device Guard Management Service (`dgssvc`) | Virtualization based code integrity | Disable | Medium | Enterprise/Education; depends on Hyper V and VBS features. |
+| Windows Defender Application Guard (`wdagservice`) | Isolated Edge sessions | Disable | Low | Pro/Enterprise only; not required for gaming workflows. |
 
 ## Media, Peripheral, and Sensor Services
 
@@ -456,6 +462,16 @@ This catalog documents the Windows 10 and Windows 11 services, scheduled tasks, 
 | `\Microsoft\Windows\WwanSvc\OobeDiscovery` | Cellular OOBE | Disable |
 | `\Microsoft\XblGameSave\XblGameSaveTask` | Xbox save sync | Optional toggle |
 | `\Microsoft\XblGameSave\XblGameSaveTaskLogon` | Xbox save logon | Optional toggle |
+| `\Microsoft\Windows\StateRepository\MaintenanceTask` | App state DB tuning | Keep |
+| `\Microsoft\Windows\StateRepository\CacheMaintenance` | App state cache cleanup | Optional |
+| `\Microsoft\Windows\Store\AutomaticAppUpdate` | Store app updates | Optional disable |
+| `\Microsoft\Windows\Store\WSRefreshBannedAppsListTask` | Store compliance refresh | Disable |
+| `\Microsoft\Windows\Store\WSRefreshCache` | Store cache maintenance | Optional disable |
+| `\Microsoft\Windows\WindowsCopilot\CopilotTask` | Copilot background refresh | Disable |
+| `\Microsoft\Windows\WindowsBackup\BackupMonitor` | Windows Backup monitor | Optional |
+| `\Microsoft\Windows\WindowsBackup\BackupTask` | Windows Backup task | Optional |
+| `\MicrosoftEdgeUpdateTaskMachineCore` | Edge updater core | Optional disable |
+| `\MicrosoftEdgeUpdateTaskMachineUA` | Edge updater UA | Optional disable |
 
 ## Inbox Apps for Removal
 
@@ -482,6 +498,8 @@ This catalog documents the Windows 10 and Windows 11 services, scheduled tasks, 
 | Microsoft Teams | `MicrosoftTeams` | Remove |
 | Microsoft Tips | `Microsoft.Getstarted` | Remove |
 | Microsoft To Do | `Microsoft.Todos` | Optional |
+| Microsoft Dev Home | `Microsoft.DevHome` | Remove |
+| Microsoft Outlook (new) | `Microsoft.OutlookForWindows` | Optional |
 | Mixed Reality Portal | `Microsoft.MixedReality.Portal` | Remove |
 | Money | `Microsoft.BingFinance` | Remove |
 | Movies and TV | `Microsoft.ZuneVideo` | Optional |
@@ -504,6 +522,7 @@ This catalog documents the Windows 10 and Windows 11 services, scheduled tasks, 
 | Weather | `Microsoft.BingWeather` | Optional |
 | Web Experience Pack | `MicrosoftWindows.Client.WebExperience` | Remove |
 | Whiteboard | `Microsoft.Whiteboard` | Remove |
+| Windows Backup | `MicrosoftWindows.Backup` | Optional |
 | Xbox App | `Microsoft.XboxApp` | Optional toggle |
 | Xbox Console Companion | `Microsoft.XboxGamingOverlay` | Optional toggle |
 | Xbox Game Bar | `Microsoft.XboxGameOverlay` | Optional toggle |
@@ -511,6 +530,61 @@ This catalog documents the Windows 10 and Windows 11 services, scheduled tasks, 
 | Xbox Speech to Text Overlay | `Microsoft.XboxSpeechToTextOverlay` | Optional |
 | Zune Music | `Microsoft.ZuneMusic` | Optional |
 | Zune Video | `Microsoft.ZuneVideo` | Optional |
+
+## Windows Optional Features (Features on Demand)
+
+| Feature | Default State | Suggested Action | Availability | Notes |
+| --- | --- | --- | --- | --- |
+| Windows Sandbox | Off | Optional enable toggle | Win10/11 Pro, Enterprise, Education | Requires Hyper V and Virtualization Based Security. |
+| Virtual Machine Platform | Off | Optional enable toggle | Win10/11 Home+ | Needed for WSL2; activates hypervisor. |
+| Windows Subsystem for Linux | Off | Optional enable toggle | Win10 2004+ and Win11 all editions | Depends on Virtual Machine Platform on Home. |
+| Windows Subsystem for Android | Off | Optional enable toggle | Win11 22H2+ Home (US), Pro, Enterprise | Exclusive to Windows 11; requires Amazon Appstore setup. |
+| Hyper V | Off | Optional enable toggle | Win10/11 Pro, Enterprise, Education | Not available on Home; enabling impacts VirtualBox/VMware. |
+| Containers | Off | Optional enable toggle | Win10/11 Pro, Enterprise | Required for Docker on Windows without WSL. |
+| BitLocker Device Encryption | On for supported hardware | Keep unless incompatible | Win10/11 Pro, Enterprise, Education | Surfaces through `BDESVC`; ensure manifests respect hardware support. |
+| Device Guard / Credential Guard | Off | Optional enable toggle | Win10/11 Enterprise, Education | Requires VBS; ties into `dgssvc` and `SgrmBroker`. |
+| AppLocker | Off | Optional enable toggle | Win10/11 Enterprise, Education | Uses `AppIDSvc`; avoid enabling on unmanaged rigs. |
+| BranchCache | Off | Optional enable toggle | Win10/11 Pro, Enterprise, Education | Service `PeerDistSvc`; rarely needed for gamers. |
+| DirectAccess | Off | Optional enable toggle | Win10/11 Enterprise | Depends on `NcaSvc`; remote corporate networking feature. |
+| Remote Server Administration Tools (RSAT) | Off | Optional install | Win10/11 Pro, Enterprise, Education | Adds admin consoles; not for gaming. |
+| OpenSSH Client | On (Win11), Optional (Win10) | Optional disable | Win10/11 all editions | Background update tasks minimal; leave as user choice. |
+| OpenSSH Server | Off | Optional enable toggle | Win10/11 all editions | Exposes SSH service; disable unless explicitly needed. |
+| Legacy Components (DirectPlay) | Off | Optional enable toggle | Win10/11 all editions | Needed for some classics; document compatibility use case. |
+| Media Features (Windows Media Player) | On | Optional disable | Win10 Home/Pro, Win11 Pro | N/A on N editions; removal affects DLNA. |
+| XPS Viewer | Off (Win11), On (older Win10) | Optional removal | Win10/11 all editions | Legacy document viewer; deprecate unless required. |
+
+## OS and SKU Availability Cheat Sheet
+
+| Component or Bundle | Win10 Home | Win10 Pro | Win10 Enterprise/Education | Win11 Home | Win11 Pro | Win11 Enterprise/Education | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Widgets & Windows Web Experience Pack (`MicrosoftWindows.Client.WebExperience`) | Limited (Spotlight only) | Limited | Limited | Included by default | Included by default | Included by default | Provides Widgets, Copilot shell, Recommendations feed. |
+| Windows Copilot UX | Not available | Not available | Not available | Included (23H2+, region gated) | Included (23H2+) | Included (23H2+) | Piggybacks on Web Experience Pack updates; disable via policy if needed. |
+| Windows Subsystem for Android | N/A | N/A | N/A | Available in supported regions | Available | Available | Exclusive to Windows 11; manage via Optional Features section. |
+| Windows Sandbox | N/A | Available | Available | N/A | Available | Available | Requires virtualization + Hyper V. |
+| Hyper V role | N/A | Available | Available | N/A | Available | Available | Home editions can only use WSL2 lightweight hypervisor. |
+| BitLocker Device Encryption | Hardware dependent auto enable | Included | Included | Hardware dependent auto enable | Included | Included | Requires TPM 2.0 and Modern Standby on Home. |
+| AppLocker (`AppIDSvc`) | N/A | N/A | Included | N/A | N/A | Included | Managed by enterprise policy only. |
+| Device Guard / Credential Guard (`dgssvc`, `SgrmBroker`) | N/A | Available (Pro for Business) | Included | N/A | Available (Pro for Business) | Included | Requires VBS; interplay with anti cheat. |
+| BranchCache (`PeerDistSvc`) | N/A | Included | Included | N/A | Included | Included | Enterprise content caching; safe to disable on personal rigs. |
+| DirectAccess (`NcaSvc`) | N/A | N/A | Included | N/A | N/A | Included | Corporate VPN replacement; disable outside enterprise. |
+| Windows Defender Application Guard (`wdagservice`) | N/A | Available | Available | N/A | Available | Available | Integrates with Edge; heavy use of virtualization. |
+| Windows Update for Business policy set (`UsoSvc`, `WaaSMedicSvc`) | Group policy limited | GP capable | GP capable | Settings based deferrals only | GP capable | GP capable | Defines how aggressively updates can be postponed. |
+| Local Group Policy Editor (`gpedit.msc`) | N/A | Included | Included | N/A | Included | Included | Drives many privacy/preset toggles; Home requires registry edits instead. |
+| Windows Hello Enhanced Biometric Suite (`WbioSrvc`, `NgcSvc`) | Included | Included | Included | Included | Included | Included | Biometrics optional but present everywhere. |
+| Windows Defender Application Control (WDAC) | Controlled via policy only | Available | Included | Controlled via policy only | Available | Included | Another name for Device Guard; avoid toggling unless policy aware. |
+
+### Windows 11 Exclusive Components Already Cataloged
+
+- Windows Widgets / Web Experience Pack (see Optional UI Components section).
+- Clipchamp, Outlook (new), Dev Home, and other Store shipped inbox apps (see Inbox Apps table).
+- Voice Access, Live Captions, and other accessibility shells piggyback on `Accessibility Tools` optional features; ensure presets leave them enabled unless user opts out.
+
+### Windows 10 Legacy Components to Keep in Mind
+
+- Legacy Microsoft Edge (EdgeHTML) scheduled tasks (`\MicrosoftEdge\MicrosoftEdgeUpdateTaskMachine*`) still exist on LTSB/LTSC branches; treat like optional UI tasks for cleanup.
+- OneSync legacy sync stack (`OneSyncSvc`) remains active on Win10 even when Widgets are absent; we already list it under Cloud Sync.
+- Windows Media Player remains on by default for Win10 non N editions; Win11 hides it behind Media Features.
+- Cortana is removed on Windows 11 23H2+, but persists as an AppX on earlier Win10/11 builds; treat it as optional removal where present.
 
 ## Using the Catalog
 
