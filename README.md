@@ -36,7 +36,7 @@ Actions land in plain text or JSON logs so you can troubleshoot anti cheat compl
 
 - Memory and contributor guidance established
 - Deep research underway on Windows 10 and 11 services, scheduled tasks, and telemetry
-- Manifest schema and PowerShell executor prototype in progress
+- Manifest schema captured, automation module + CLI scaffolded, and WPF desktop host bootstrapped
 
 If you enjoy alpha stage experiments and PowerShell tinkering, you are in the right place.
 
@@ -46,6 +46,37 @@ If you enjoy alpha stage experiments and PowerShell tinkering, you are in the ri
 2. Build the PowerShell executor with WhatIf previews, SKU filtering, logging, and an automatic undo queue.
 3. Craft a WinUI or WPF desktop shell that reads the same manifests, offers one click presets, and exposes advanced categories for deeper control.
 4. Package manifests, scripts, and UI into a single portable download with clear offline instructions.
+
+## Development Quick Start
+
+**Prerequisites**
+- .NET 8 SDK for building the WPF host (required only for contributors)
+- Windows 10 or newer test box for running the UI and PowerShell executor
+
+**Run the PowerShell executor directly**
+1. Open an elevated Windows PowerShell 5.1 console.
+2. Navigate to the `automation` folder.
+3. Enumerate available presets:
+	```powershell
+	.\wge.ps1 -List
+	```
+4. Preview a preset without making changes:
+	```powershell
+	.\wge.ps1 -Preset performance -DryRun -SkipUnsupported
+	```
+5. Apply the preset (writes logs and enforces undo metadata):
+	```powershell
+	.\wge.ps1 -Preset performance -SkipUnsupported
+	```
+
+**Build the single-file WPF host**
+1. From the repo root on any development machine with the .NET 8 SDK installed:
+	```powershell
+	dotnet publish src/WGE.App/WGE.App.csproj -c Release -r win10-x64 \
+		 -p:PublishSingleFile=true -p:SelfContained=true -p:IncludeNativeLibrariesForSelfExtract=true
+	```
+2. Find the portable `.exe` inside `src/WGE.App/bin/Release/net8.0-windows/win10-x64/publish/`.
+3. Copy the published executable to a clean Windows PC (no extra dependencies required). The embedded automation scripts run entirely offline and revert changes through the bundled undo metadata.
 
 ## Contributing
 
