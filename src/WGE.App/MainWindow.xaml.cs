@@ -1,9 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
@@ -15,6 +15,11 @@ public partial class MainWindow : Window
 {
     private readonly ObservableCollection<ManifestSummary> _manifests = new();
     private readonly ObservableCollection<TweakSummary> _tweaks = new();
+    private readonly ObservableCollection<ActionResultRow> _results = new();
+    private static readonly JsonSerializerOptions AutomationJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
     private ManifestSummary? _selectedManifest;
 
     public MainWindow()
@@ -22,6 +27,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         ManifestList.ItemsSource = _manifests;
         TweaksGrid.ItemsSource = _tweaks;
+        ResultGrid.ItemsSource = _results;
         Loaded += OnLoaded;
     }
 
@@ -140,11 +146,30 @@ public partial class MainWindow : Window
         AppendLog($"Launching preset '{_selectedManifest.Name}' ({presetId}) with dryRun={(dryRun ? "true" : "false")}.");
 
         ToggleUiBusy(true);
+        _results.Clear();
 
         try
         {
-            var output = await Task.Run(() => ExecuteAutomation(powershellPath, scriptPath, presetId, dryRun));
-            AppendLog(output);
+            var runResult = await Task.Run(() => ExecuteAutomation(powershellPath, scriptPath, presetId, dryRun));
+            if (runResult.Summary is not null)
+            {
+                ApplyAutomationSummary(runResult.Summary, runResult, dryRun);
+            }
+            else
+            {
+                if (!string.IsNullOrWhiteSpace(runResult.StandardOutput))
+                {
+                    AppendLog(runResult.StandardOutput.Trim());
+                }
+
+                if (!string.IsNullOrWhiteSpace(runResult.StandardError))
+                {
+                    AppendLog($"stderr: {runResult.StandardError.Trim()}");
+                }
+
+                AppendLog($"Exit code: {runResult.ExitCode}");
+                _results.Add(new ActionResultRow("FAIL", _selectedManifest?.Name ?? presetId, "-", "Automation did not return structured output.", $"Exit code {runResult.ExitCode}"));
+            }
         }
         catch (Exception ex)
         {
@@ -156,7 +181,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private static string ExecuteAutomation(string powershellPath, string scriptPath, string presetId, bool dryRun)
+    private static AutomationRunResult ExecuteAutomation(string powershellPath, string scriptPath, string presetId, bool dryRun)
     {
         var info = new ProcessStartInfo(powershellPath)
         {
@@ -176,27 +201,33 @@ public partial class MainWindow : Window
         info.ArgumentList.Add("-Preset");
         info.ArgumentList.Add(presetId);
         info.ArgumentList.Add("-SkipUnsupported");
+        info.ArgumentList.Add("-AsJson");
         if (dryRun)
         {
             info.ArgumentList.Add("-DryRun");
         }
 
         using var process = new Process { StartInfo = info };
-        var buffer = new StringBuilder();
-
         process.Start();
-        buffer.AppendLine(process.StandardOutput.ReadToEnd());
-        var error = process.StandardError.ReadToEnd();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
         process.WaitForExit();
 
-        if (!string.IsNullOrWhiteSpace(error))
+        AutomationSummary? summary = null;
+        var trimmedOut = stdout.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmedOut))
         {
-            buffer.AppendLine("[stderr]");
-            buffer.AppendLine(error);
+            try
+            {
+                summary = JsonSerializer.Deserialize<AutomationSummary>(trimmedOut, AutomationJsonOptions);
+            }
+            catch (JsonException)
+            {
+                // If parsing fails, fall back to the textual output.
+            }
         }
 
-        buffer.AppendLine($"Exit code: {process.ExitCode}");
-        return buffer.ToString();
+        return new AutomationRunResult(summary, stdout, stderr, process.ExitCode);
     }
 
     private void ManifestList_OnSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -237,6 +268,79 @@ public partial class MainWindow : Window
     {
         ApplyButton.IsEnabled = !busy;
         DryRunButton.IsEnabled = !busy;
+    }
+
+    private void ApplyAutomationSummary(AutomationSummary summary, AutomationRunResult runResult, bool dryRun)
+    {
+        var message = summary.Message ?? "Preset completed.";
+        AppendLog(message);
+
+        if (summary.Counts is not null)
+        {
+            AppendLog($"Totals -> ok: {summary.Counts.Succeeded}, fail: {summary.Counts.Failed}, skipped: {summary.Counts.Skipped}, previewed: {summary.Counts.WhatIf}");
+        }
+
+        if (!dryRun && !string.IsNullOrWhiteSpace(summary.ActionLogPath))
+        {
+            AppendLog($"Action log saved to {summary.ActionLogPath}");
+        }
+        else if (dryRun)
+        {
+            AppendLog("Dry run only; no changes saved.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(runResult.StandardError))
+        {
+            AppendLog($"stderr: {runResult.StandardError.Trim()}");
+        }
+
+        AppendLog($"Exit code: {runResult.ExitCode}");
+
+        _results.Clear();
+        if (summary.Entries is not null && summary.Entries.Count > 0)
+        {
+            foreach (var entry in summary.Entries)
+            {
+                var details = BuildDetails(entry);
+                _results.Add(new ActionResultRow(
+                    Status: entry.Status is not null ? entry.Status.ToUpperInvariant() : "UNK",
+                    TweakName: !string.IsNullOrWhiteSpace(entry.TweakName) ? entry.TweakName! : entry.TweakId ?? "(unknown)",
+                    Target: entry.Target ?? string.Empty,
+                    Message: entry.Message ?? string.Empty,
+                    Details: details));
+            }
+        }
+
+        if (_results.Count == 0)
+        {
+            _results.Add(new ActionResultRow("INFO", "No commands", "-", "Preset did not execute any commands.", string.Empty));
+        }
+    }
+
+    private static string BuildDetails(AutomationEntry entry)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(entry.SkipReason))
+        {
+            parts.Add($"skip: {entry.SkipReason}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.ErrorMessage))
+        {
+            parts.Add($"error: {entry.ErrorMessage}");
+        }
+
+        if (entry.RequiresReboot)
+        {
+            parts.Add("reboot required");
+        }
+
+        if (entry.RequiresElevation)
+        {
+            parts.Add("needs elevation");
+        }
+
+        return parts.Count == 0 ? string.Empty : string.Join(" | ", parts);
     }
 
     private static string ResolvePowershellPath()
@@ -284,7 +388,7 @@ public partial class MainWindow : Window
         string Category,
         int TweakCount,
         string FilePath,
-        System.Collections.Generic.List<TweakSummary> Tweaks)
+        List<TweakSummary> Tweaks)
     {
         public string DisplayName => $"{Name} ({Id})";
         public string[] Tags { get; set; } = Array.Empty<string>();
@@ -297,4 +401,44 @@ public partial class MainWindow : Window
         string DefaultBehavior,
         string WhenDisabled,
         string RiskLevel);
+
+    private sealed record AutomationRunResult(AutomationSummary? Summary, string StandardOutput, string StandardError, int ExitCode);
+
+    private sealed record AutomationSummary
+    {
+        public string? PresetId { get; init; }
+        public string? PresetName { get; init; }
+        public string? ManifestPath { get; init; }
+        public bool DryRun { get; init; }
+        public string? ActionLogPath { get; init; }
+        public AutomationCounts? Counts { get; init; }
+        public List<AutomationEntry> Entries { get; init; } = new();
+        public string? Message { get; init; }
+    }
+
+    private sealed record AutomationCounts
+    {
+        public int Total { get; init; }
+        public int Succeeded { get; init; }
+        public int Failed { get; init; }
+        public int Skipped { get; init; }
+        public int WhatIf { get; init; }
+    }
+
+    private sealed record AutomationEntry
+    {
+        public string? Status { get; init; }
+        public string? TweakId { get; init; }
+        public string? TweakName { get; init; }
+        public string? CommandType { get; init; }
+        public string? Target { get; init; }
+        public string? Message { get; init; }
+        public bool RequiresReboot { get; init; }
+        public bool RequiresElevation { get; init; }
+        public bool Skipped { get; init; }
+        public string? SkipReason { get; init; }
+        public string? ErrorMessage { get; init; }
+    }
+
+    private sealed record ActionResultRow(string Status, string TweakName, string Target, string Message, string Details);
 }

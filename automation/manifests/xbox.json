@@ -1,0 +1,213 @@
+{
+  "schemaVersion": "0.1.0",
+  "metadata": {
+    "id": "xbox-services",
+    "name": "Xbox Services",
+    "category": "Gaming Integrations",
+    "description": "Disables background Xbox Live helpers when you're playing on non-Xbox platforms while keeping Game Pass installs reversible.",
+    "defaultState": "preview",
+    "tags": ["xbox", "network", "optional"]
+  },
+  "tweaks": [
+    {
+      "id": "svc-xboxgipsvc",
+      "name": "Xbox Accessory Management Service",
+      "category": "Xbox",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Keeps the Xbox controller accessory apps ready even when no controller is connected, using a small amount of CPU time.",
+      "whenDisabled": "Stops the accessory management service so it no longer monitors devices until you re-enable it.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["xbox", "services"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "XboxGipSvc",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "XboxGipSvc",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Manual"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "XboxGipSvc",
+            "action": "SetStartup",
+            "startupType": "Manual"
+          },
+          {
+            "type": "service",
+            "name": "XboxGipSvc",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "Game Bar will prompt to re-enable when you attach an Xbox accessory."
+    },
+    {
+      "id": "svc-xblauthmanager",
+      "name": "Xbox Live Auth Manager",
+      "category": "Xbox",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Authenticates Xbox Live sessions for achievements, cloud saves, and store access.",
+      "whenDisabled": "Stops Xbox Live authentication. Game Bar, Xbox app, and Game Pass titles will prompt for sign-in again when you restore it.",
+      "riskLevel": "medium",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["xbox", "services"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "XblAuthManager",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "XblAuthManager",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Manual"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "XblAuthManager",
+            "action": "SetStartup",
+            "startupType": "Manual"
+          },
+          {
+            "type": "service",
+            "name": "XblAuthManager",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "Required for Xbox Cloud saves and Game Pass licensing."
+    },
+    {
+      "id": "svc-xblgamesave",
+      "name": "Xbox Live Game Save",
+      "category": "Xbox",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Keeps cloud save synchronization running in the background for Xbox-enabled titles.",
+      "whenDisabled": "Stops automatic save sync. Cloud saves resume syncing once the service is restored.",
+      "riskLevel": "medium",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["xbox", "cloud"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "XblGameSave",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "XblGameSave",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Manual"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "XblGameSave",
+            "action": "SetStartup",
+            "startupType": "Manual"
+          },
+          {
+            "type": "service",
+            "name": "XblGameSave",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "Leave enabled if you actively rely on Xbox Play Anywhere titles."
+    },
+    {
+      "id": "svc-xboxnetapisvc",
+      "name": "Xbox Live Networking Service",
+      "category": "Xbox",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Manages network transport for Xbox multiplayer features and Xbox Party Chat.",
+      "whenDisabled": "Turns off Xbox multiplayer connectivity while general network access continues to work.",
+      "riskLevel": "medium",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["xbox", "network"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "XboxNetApiSvc",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "XboxNetApiSvc",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Manual"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "XboxNetApiSvc",
+            "action": "SetStartup",
+            "startupType": "Manual"
+          },
+          {
+            "type": "service",
+            "name": "XboxNetApiSvc",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "Re-enable before using Xbox party chat or Game Streaming features from the Xbox app."
+    }
+  ]
+}

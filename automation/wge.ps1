@@ -13,7 +13,10 @@ param(
     [switch]$List,
 
     [Parameter(ParameterSetName = 'List')]
-    [switch]$VerboseSkus
+    [switch]$VerboseSkus,
+
+    [Parameter(ParameterSetName = 'Apply')]
+    [switch]$AsJson
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,12 +71,119 @@ try {
     }
 
     $results = Set-WGEPreset -Manifest $loadedManifest -Action 'Disable' -SkipUnsupported:$SkipUnsupported.IsPresent
-    if (-not $results) {
-        Write-Output "No commands executed."
+
+    if (-not $results -or $results.Count -eq 0) {
+        $summary = [pscustomobject]@{
+            PresetId       = $loadedManifest.metadata.id
+            PresetName     = $loadedManifest.metadata.name
+            ManifestPath   = $loadedManifest.SourcePath
+            DryRun         = $whatIf
+            ActionLogPath  = $null
+            Counts         = [pscustomobject]@{
+                Total     = 0
+                Succeeded = 0
+                Failed    = 0
+                Skipped   = 0
+                WhatIf    = 0
+            }
+            Entries        = @()
+            Message        = 'No commands executed.'
+        }
+
+        if ($AsJson) {
+            $summary | ConvertTo-Json -Depth 6
+            return
+        }
+
+        Write-Output $summary.Message
+        return
     }
-    else {
-        Write-Output "Applied preset '$($loadedManifest.metadata.name)' using manifest '$($loadedManifest.SourcePath)'."
-        $results | ForEach-Object { Write-Output " - $_" }
+
+    $operation = if ($whatIf) { 'Previewed' } else { 'Applied' }
+    $statusEntries = foreach ($entry in $results) {
+        $status = if ($entry.Skipped) {
+            'skip'
+        }
+        elseif (-not $entry.Succeeded) {
+            'fail'
+        }
+        elseif ($entry.DryRun) {
+            'whatif'
+        }
+        else {
+            'ok'
+        }
+
+        $target = if ($entry.CommandType -eq 'meta') { $entry.TweakName } else { $entry.Target }
+
+        [pscustomobject]@{
+            Status          = $status
+            TweakId         = $entry.TweakId
+            TweakName       = $entry.TweakName
+            CommandType     = $entry.CommandType
+            Target          = $target
+            Message         = $entry.Message
+            RequiresReboot  = $entry.RequiresReboot
+            RequiresElevation = $entry.RequiresElevation
+            Skipped         = $entry.Skipped
+            SkipReason      = $entry.SkipReason
+            ErrorMessage    = $entry.ErrorMessage
+        }
+    }
+
+    $counts = [pscustomobject]@{
+        Total     = $statusEntries.Count
+        Succeeded = ($statusEntries | Where-Object { $_.Status -eq 'ok' }).Count
+        Failed    = ($statusEntries | Where-Object { $_.Status -eq 'fail' }).Count
+        Skipped   = ($statusEntries | Where-Object { $_.Status -eq 'skip' }).Count
+        WhatIf    = ($statusEntries | Where-Object { $_.Status -eq 'whatif' }).Count
+    }
+
+    $logPath = $null
+    if (-not $whatIf) {
+        $logPath = Export-WGEActionLog -Manifest $loadedManifest -Results $results -SystemProfile $profile
+    }
+
+    $summary = [pscustomobject]@{
+        PresetId       = $loadedManifest.metadata.id
+        PresetName     = $loadedManifest.metadata.name
+        ManifestPath   = $loadedManifest.SourcePath
+        DryRun         = $whatIf
+        ActionLogPath  = $logPath
+        Counts         = $counts
+        Entries        = $statusEntries
+        Message        = "$operation preset '$($loadedManifest.metadata.name)' using manifest '$($loadedManifest.SourcePath)'."
+    }
+
+    if ($AsJson) {
+        $summary | ConvertTo-Json -Depth 6
+        return
+    }
+
+    Write-Output $summary.Message
+
+    foreach ($entry in $statusEntries) {
+        $statusMarker = switch ($entry.Status) {
+            'skip'   { '[skip]' }
+            'fail'   { '[fail]' }
+            'whatif' { '[whatif]' }
+            default  { '[ok]' }
+        }
+
+        Write-Output (" {0} {1} [{2}] :: {3}" -f $statusMarker, $entry.TweakName, $entry.Target, $entry.Message)
+        if ($entry.ErrorMessage) {
+            Write-Output ("    error: {0}" -f $entry.ErrorMessage)
+        }
+        if ($entry.SkipReason) {
+            Write-Output ("    reason: {0}" -f $entry.SkipReason)
+        }
+    }
+
+    if ($whatIf) {
+        Write-Output 'Dry run only; no log file was written.'
+    }
+    elseif ($logPath) {
+        Write-Output "Action log saved to $logPath"
     }
 }
 finally {

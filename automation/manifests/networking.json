@@ -1,0 +1,204 @@
+{
+  "schemaVersion": "0.1.0",
+  "metadata": {
+    "id": "network-trim",
+    "name": "Network Trim",
+    "category": "Network",
+    "description": "Reduces bandwidth use from background updates, search indexing, and peer delivery while you focus on gaming.",
+    "defaultState": "preview",
+    "tags": ["network", "updates", "optional"]
+  },
+  "tweaks": [
+    {
+      "id": "svc-dosvc",
+      "name": "Delivery Optimization",
+      "category": "Bandwidth",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Coordinates peer-to-peer content distribution for Windows Update and Microsoft Store downloads, consuming bandwidth in the background.",
+      "whenDisabled": "Stops Delivery Optimization and prevents it from starting automatically, forcing Windows to download updates directly without relaying data to other PCs.",
+      "riskLevel": "medium",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["network", "updates"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "DoSvc",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "DoSvc",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Automatic"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "DoSvc",
+            "action": "SetStartup",
+            "startupType": "Automatic"
+          },
+          {
+            "type": "service",
+            "name": "DoSvc",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "Store downloads may take slightly longer without Delivery Optimization's caching layer. The preset now cancels active Delivery Optimization sessions and flushes cached pieces before shutting the service down."
+    },
+    {
+      "id": "reg-dodeliverymode",
+      "name": "Delivery Optimization Download Mode",
+      "category": "Bandwidth",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Allows Windows to grab updates from and serve them to other PCs on the local network and Internet.",
+      "whenDisabled": "Forces Delivery Optimization into LAN-only peer mode and blocks Internet upload by policy.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["network", "registry"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "registry",
+            "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization\\Settings",
+            "name": "DownloadMode",
+            "action": "SetValue",
+            "valueType": "DWord",
+            "value": 1,
+            "undoAction": "SetValue",
+            "undoValueType": "DWord",
+            "undoValue": 3
+          }
+        ],
+        "enable": [
+          {
+            "type": "registry",
+            "path": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\DeliveryOptimization\\Settings",
+            "name": "DownloadMode",
+            "action": "SetValue",
+            "valueType": "DWord",
+            "value": 3
+          }
+        ]
+      },
+      "notes": "Mode 1 keeps peer caching on your LAN only. Mode 3 is the Windows default allowing Internet peers."
+    },
+    {
+      "id": "svc-wsearch",
+      "name": "Windows Search Indexer",
+      "category": "System",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Indexes documents, pictures, and emails in the background. On SSD-based rigs the indexer can still spike disk and CPU while gaming.",
+      "whenDisabled": "Stops the indexer and turns off automatic start. File Explorer searches still work but run a little slower.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["performance", "network"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "WSearch",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "WSearch",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Automatic"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "WSearch",
+            "action": "SetStartup",
+            "startupType": "Automatic"
+          },
+          {
+            "type": "service",
+            "name": "WSearch",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "If you rely on Outlook offline search, keep WSearch enabled."
+    },
+    {
+      "id": "task-updateorchestrator-scan",
+      "name": "Update Orchestrator Scan",
+      "category": "Updates",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Triggers Windows Update scans and downloads during idle periods, often during gaming sessions on desktop builds.",
+      "whenDisabled": "Blocks automatic Windows Update scan tasks so you can manually check for updates on your schedule.",
+      "riskLevel": "medium",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["updates", "scheduled-task"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "scheduledTask",
+            "taskPath": "\\Microsoft\\Windows\\UpdateOrchestrator\\",
+            "taskName": "Schedule Scan",
+            "action": "Disable",
+            "undoAction": "Enable"
+          },
+          {
+            "type": "scheduledTask",
+            "taskPath": "\\Microsoft\\Windows\\UpdateOrchestrator\\",
+            "taskName": "USO_UxBroker",
+            "action": "Disable",
+            "undoAction": "Enable"
+          }
+        ],
+        "enable": [
+          {
+            "type": "scheduledTask",
+            "taskPath": "\\Microsoft\\Windows\\UpdateOrchestrator\\",
+            "taskName": "Schedule Scan",
+            "action": "Enable"
+          },
+          {
+            "type": "scheduledTask",
+            "taskPath": "\\Microsoft\\Windows\\UpdateOrchestrator\\",
+            "taskName": "USO_UxBroker",
+            "action": "Enable"
+          }
+        ]
+      },
+      "notes": "Windows Update will still run when you manually press 'Check for updates'. Feature updates may re-enable these tasks automatically."
+    }
+  ]
+}

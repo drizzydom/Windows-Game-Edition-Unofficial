@@ -1,0 +1,204 @@
+{
+  "schemaVersion": "0.1.0",
+  "metadata": {
+    "id": "privacy-shield",
+    "name": "Privacy Shield",
+    "category": "Privacy",
+    "description": "Shuts down diagnostics pipelines, telemetry services, and data collection scheduled tasks while keeping core OS features intact.",
+    "defaultState": "recommended",
+    "tags": ["privacy", "telemetry", "recommended"]
+  },
+  "tweaks": [
+    {
+      "id": "svc-diagtrack",
+      "name": "Connected User Experiences and Telemetry",
+      "category": "Telemetry",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Collects telemetry and experience data for Microsoft analytic services, continuously uploading diagnostics in the background.",
+      "whenDisabled": "Stops telemetry upload and prevents the DiagTrack service from restarting automatically.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["privacy", "telemetry"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "DiagTrack",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "DiagTrack",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Automatic"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "DiagTrack",
+            "action": "SetStartup",
+            "startupType": "Automatic"
+          },
+          {
+            "type": "service",
+            "name": "DiagTrack",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "Windows 10/11 Home users may see diagnostics options greyed out while the service is disabled."
+    },
+    {
+      "id": "svc-dmwappushservice",
+      "name": "Device Management Wireless Application Protocol",
+      "category": "Telemetry",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Coordinates push notifications and telemetry payload delivery for Microsoft services.",
+      "whenDisabled": "Prevents Microsoft push telemetry from transmitting in the background. Standard notifications continue through Windows Push Notification Service.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["privacy"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "service",
+            "name": "dmwappushservice",
+            "action": "Stop",
+            "arguments": ["-Force"],
+            "undoAction": "Start",
+            "undoArguments": []
+          },
+          {
+            "type": "service",
+            "name": "dmwappushservice",
+            "action": "SetStartup",
+            "startupType": "Disabled",
+            "undoAction": "SetStartup",
+            "undoStartupType": "Manual"
+          }
+        ],
+        "enable": [
+          {
+            "type": "service",
+            "name": "dmwappushservice",
+            "action": "SetStartup",
+            "startupType": "Manual"
+          },
+          {
+            "type": "service",
+            "name": "dmwappushservice",
+            "action": "Start"
+          }
+        ]
+      },
+      "notes": "Rarely used outside of enterprise device management."
+    },
+    {
+      "id": "task-ceip-consolidator",
+      "name": "CEIP Consolidator Scheduled Task",
+      "category": "Telemetry",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Collects and uploads customer experience data daily as part of the Customer Experience Improvement Program.",
+      "whenDisabled": "Prevents CEIP data collection and upload tasks from running automatically.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["privacy", "scheduled-task"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "scheduledTask",
+            "taskPath": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\",
+            "taskName": "Consolidator",
+            "action": "Disable",
+            "undoAction": "Enable"
+          },
+          {
+            "type": "scheduledTask",
+            "taskPath": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\",
+            "taskName": "UsbCeip",
+            "action": "Disable",
+            "undoAction": "Enable"
+          }
+        ],
+        "enable": [
+          {
+            "type": "scheduledTask",
+            "taskPath": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\",
+            "taskName": "Consolidator",
+            "action": "Enable"
+          },
+          {
+            "type": "scheduledTask",
+            "taskPath": "\\Microsoft\\Windows\\Customer Experience Improvement Program\\",
+            "taskName": "UsbCeip",
+            "action": "Enable"
+          }
+        ]
+      },
+      "notes": "Windows may recreate these tasks after feature updates; the undo log captures the original state for restoration."
+    },
+    {
+      "id": "reg-telemetry-level",
+      "name": "Telemetry Consent Level",
+      "category": "Telemetry",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Gives Microsoft permission to collect optional diagnostic data unless policies say otherwise.",
+      "whenDisabled": "Pins telemetry to the minimal 'Security' level supported by the SKU.",
+      "riskLevel": "medium",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["privacy", "registry"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "registry",
+            "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
+            "name": "AllowTelemetry",
+            "action": "SetValue",
+            "valueType": "DWord",
+            "value": 0,
+            "undoAction": "SetValue",
+            "undoValueType": "DWord",
+            "undoValue": 3
+          }
+        ],
+        "enable": [
+          {
+            "type": "registry",
+            "path": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
+            "name": "AllowTelemetry",
+            "action": "SetValue",
+            "valueType": "DWord",
+            "value": 3
+          }
+        ]
+      },
+      "notes": "SKU limits apply: Windows 10/11 Home and Pro treat 0 as 'Required' only; Enterprise/Education honor true Security-only telemetry."
+    }
+  ]
+}

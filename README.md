@@ -37,6 +37,7 @@ Actions land in plain text or JSON logs so you can troubleshoot anti cheat compl
 - Memory and contributor guidance established
 - Deep research underway on Windows 10 and 11 services, scheduled tasks, and telemetry
 - Manifest schema captured, automation module + CLI scaffolded, and WPF desktop host bootstrapped
+- Structured JSON output now fuels the desktop host's live action breakdown grid and log export.
 
 If you enjoy alpha stage experiments and PowerShell tinkering, you are in the right place.
 
@@ -56,18 +57,19 @@ If you enjoy alpha stage experiments and PowerShell tinkering, you are in the ri
 **Run the PowerShell executor directly**
 1. Open an elevated Windows PowerShell 5.1 console.
 2. Navigate to the `automation` folder.
-3. Enumerate available presets:
+3. Enumerate available presets (append `-VerboseSkus` to see which tweaks apply on your edition):
 	```powershell
 	.\wge.ps1 -List
 	```
-4. Preview a preset without making changes:
+4. Preview a preset without making changes (try `performance`, `privacy`, `xbox`, or `networking`):
 	```powershell
 	.\wge.ps1 -Preset performance -DryRun -SkipUnsupported
 	```
-5. Apply the preset (writes logs and enforces undo metadata):
+5. Apply the preset (writes logs and enforces undo metadata). Add `-AsJson` for structured output that the desktop app consumes:
 	```powershell
-	.\wge.ps1 -Preset performance -SkipUnsupported
+	.\wge.ps1 -Preset performance -SkipUnsupported -AsJson
 	```
+	Remove `-AsJson` if you prefer the classic human-readable log output.
 
 **Build the single-file WPF host**
 1. From the repo root on any development machine with the .NET 8 SDK installed:

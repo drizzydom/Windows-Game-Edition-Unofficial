@@ -11,11 +11,13 @@
     FunctionsToExport = @(
         'Get-WGEManifest',
         'Get-WGESystemProfile',
+        'Get-WGEStateRoot',
         'Invoke-WGETweak',
         'Set-WGEPreset',
         'Get-WGEUndoPlan',
         'Test-WGETweakSupport',
-        'Test-WGEAdminSession'
+        'Test-WGEAdminSession',
+        'Export-WGEActionLog'
     )
 
     AliasesToExport   = @()
@@ -30,7 +32,7 @@
         PSData = @{
             Tags        = @('windows', 'gaming', 'automation')
             ProjectUri  = 'https://github.com/drizzydom/Windows-Game-Edition-Unofficial'
-            ReleaseNotes = 'Initial scaffolding. Schema validation and logging will expand in future iterations.'
+            ReleaseNotes = 'Adds action logging, undo planning, structured summaries, and scheduled task/registry command support.'
         }
     }
 }
