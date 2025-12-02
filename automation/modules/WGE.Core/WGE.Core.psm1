@@ -639,6 +639,272 @@ function Invoke-WGERegistryCommand {
     }
 }
 
+function New-WGETweakCheckResult {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string]$CommandType,
+
+        [Parameter(Mandatory)]
+        [string]$Target,
+
+        [Parameter(Mandatory)]
+        [string]$Desired,
+
+        [Parameter(Mandatory)]
+        [string]$Actual,
+
+        [bool]$Compliant,
+
+        [string]$Notes
+    )
+
+    return [pscustomobject]@{
+        CommandType = $CommandType
+        Target      = $Target
+        Desired     = $Desired
+        Actual      = $Actual
+        Compliant   = $Compliant
+        Notes       = $Notes
+    }
+}
+
+function Get-WGETweakStatus {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Manifest,
+
+        [Parameter(Mandatory)]
+        [pscustomobject]$Tweak,
+
+        [pscustomobject]$SystemProfile
+    )
+
+    if (-not $SystemProfile) {
+        $SystemProfile = Get-WGESystemProfile
+    }
+
+    $supported = Test-WGETweakSupport -Tweak $Tweak -Profile $SystemProfile
+    if (-not $supported) {
+        return [pscustomobject]@{
+            TweakId           = $Tweak.id
+            TweakName         = $Tweak.name
+            State             = 'Unsupported'
+            Message           = "Preset skips this tweak on $($SystemProfile.ProductName)."
+            Checks            = @()
+            RequiresReboot    = [bool]$Tweak.requiresReboot
+            RequiresElevation = [bool]$Tweak.requiresElevation
+            RiskLevel         = $Tweak.riskLevel
+            Supported         = $false
+            DefaultBehavior   = $Tweak.defaultBehavior
+            WhenDisabled      = $Tweak.whenDisabled
+        }
+    }
+
+    $disableCommands = @()
+    if ($Tweak.commands -and $Tweak.commands.disable) {
+        $disableCommands = @($Tweak.commands.disable)
+    }
+
+    $checks = @()
+    foreach ($command in $disableCommands) {
+        $target = Get-WGECommandTarget -Command $command
+        switch ($command.type) {
+            'service' {
+                try {
+                    $service = Get-Service -Name $command.name -ErrorAction Stop
+                    $actualStatus = $service.Status.ToString()
+                    $actualStartup = $service.StartType.ToString()
+
+                    switch ($command.action) {
+                        'Stop' {
+                            $desired = 'Stopped'
+                            $compliant = ($service.Status -eq 'Stopped')
+                            $checks += New-WGETweakCheckResult -CommandType 'service' -Target $target -Desired $desired -Actual $actualStatus -Compliant:$compliant -Notes ''
+                        }
+                        'Start' {
+                            $desired = 'Running'
+                            $compliant = ($service.Status -eq 'Running')
+                            $checks += New-WGETweakCheckResult -CommandType 'service' -Target $target -Desired $desired -Actual $actualStatus -Compliant:$compliant -Notes ''
+                        }
+                        'SetStartup' {
+                            $desired = $command.startupType
+                            $compliant = $false
+                            if ($desired) {
+                                $compliant = ($service.StartType.ToString() -eq $desired)
+                            }
+                            $checks += New-WGETweakCheckResult -CommandType 'service' -Target $target -Desired $desired -Actual $actualStartup -Compliant:$compliant -Notes ''
+                        }
+                        default {
+                            $checks += New-WGETweakCheckResult -CommandType 'service' -Target $target -Desired $command.action -Actual 'Unsupported action' -Compliant:$false -Notes:'Unsupported service action for status check.'
+                        }
+                    }
+                }
+                catch {
+                    $checks += New-WGETweakCheckResult -CommandType 'service' -Target $target -Desired $command.action -Actual 'Service not found' -Compliant:$false -Notes:$_.Exception.Message
+                }
+            }
+            'scheduledTask' {
+                try {
+                    $taskPath = if ($command.taskPath) { $command.taskPath } else { '\\' }
+                    $task = Get-ScheduledTask -TaskPath $taskPath -TaskName $command.taskName -ErrorAction Stop
+                    $state = $task.State.ToString()
+                    $desired = if ($command.action -eq 'Disable') { 'Disabled' } elseif ($command.action -eq 'Enable') { 'Ready' } else { $command.action }
+                    $compliant = $false
+                    if ($command.action -eq 'Disable') {
+                        $compliant = ($task.State -eq 'Disabled')
+                    }
+                    elseif ($command.action -eq 'Enable') {
+                        $compliant = ($task.State -ne 'Disabled')
+                    }
+                    $checks += New-WGETweakCheckResult -CommandType 'scheduledTask' -Target $target -Desired $desired -Actual $state -Compliant:$compliant -Notes ''
+                }
+                catch {
+                    $checks += New-WGETweakCheckResult -CommandType 'scheduledTask' -Target $target -Desired $command.action -Actual 'Task not found' -Compliant:$false -Notes:$_.Exception.Message
+                }
+            }
+            'registry' {
+                $path = $command.path
+                $valueName = $command.name
+                $desiredDisplay = ''
+                if ($command.action -eq 'SetValue') {
+                    $desiredDisplay = "Value=$($command.value)"
+                }
+                elseif ($command.action -eq 'RemoveValue') {
+                    $desiredDisplay = 'Value removed'
+                }
+                else {
+                    $desiredDisplay = $command.action
+                }
+
+                try {
+                    if (-not (Test-Path -Path $path)) {
+                        $checks += New-WGETweakCheckResult -CommandType 'registry' -Target $target -Desired $desiredDisplay -Actual 'Registry path missing' -Compliant:$false -Notes ''
+                        continue
+                    }
+
+                    $item = Get-ItemProperty -Path $path -ErrorAction Stop
+                    if ($command.action -eq 'SetValue') {
+                        $expected = Convert-WGERegistryValue -Value $command.value -Type $command.valueType
+                        $actualValue = $item.$valueName
+                        $actualNormalized = if ($null -eq $actualValue) { '<null>' } else { $actualValue.ToString() }
+                        $expectedNormalized = if ($null -eq $expected) { '<null>' } else { $expected.ToString() }
+                        $compliant = $false
+                        if ($null -eq $actualValue -and $null -eq $expected) {
+                            $compliant = $true
+                        }
+                        elseif ($null -ne $actualValue -and $null -ne $expected) {
+                            $compliant = ($actualValue.ToString() -eq $expected.ToString())
+                        }
+                        $checks += New-WGETweakCheckResult -CommandType 'registry' -Target $target -Desired $expectedNormalized -Actual $actualNormalized -Compliant:$compliant -Notes ''
+                    }
+                    elseif ($command.action -eq 'RemoveValue') {
+                        $hasValue = $false
+                        try {
+                            $value = Get-ItemPropertyValue -Path $path -Name $valueName -ErrorAction Stop
+                            $hasValue = $true
+                        }
+                        catch {
+                            $hasValue = $false
+                        }
+                        $actualInfo = if ($hasValue) { 'Value present' } else { 'Value missing' }
+                        $compliant = -not $hasValue
+                        $checks += New-WGETweakCheckResult -CommandType 'registry' -Target $target -Desired 'Value removed' -Actual $actualInfo -Compliant:$compliant -Notes ''
+                    }
+                    else {
+                        $checks += New-WGETweakCheckResult -CommandType 'registry' -Target $target -Desired $command.action -Actual 'Unsupported registry action' -Compliant:$false -Notes:'Unsupported registry action for status check.'
+                    }
+                }
+                catch {
+                    $checks += New-WGETweakCheckResult -CommandType 'registry' -Target $target -Desired $desiredDisplay -Actual 'Registry access failed' -Compliant:$false -Notes:$_.Exception.Message
+                }
+            }
+            default {
+                $checks += New-WGETweakCheckResult -CommandType $command.type -Target $target -Desired $command.action -Actual 'Status check unavailable' -Compliant:$false -Notes:'Command type not yet supported for status tracking.'
+            }
+        }
+    }
+
+    $totalChecks = $checks.Count
+    $compliantChecks = ($checks | Where-Object { $_.Compliant }).Count
+    $state = 'Unknown'
+    if ($totalChecks -eq 0) {
+        $state = 'Unknown'
+    }
+    elseif ($compliantChecks -eq $totalChecks) {
+        $state = 'Applied'
+    }
+    elseif ($compliantChecks -eq 0) {
+        $state = 'NotApplied'
+    }
+    else {
+        $state = 'Partial'
+    }
+
+    $issues = $checks | Where-Object { -not $_.Compliant }
+    $message = if ($issues) {
+        ($issues | ForEach-Object { "${($_.Target)} => ${($_.Actual)}" }) -join '; '
+    }
+    elseif ($totalChecks -gt 0) {
+        'Matches preset recommendations.'
+    }
+    else {
+        'No status checks defined for this tweak.'
+    }
+
+    return [pscustomobject]@{
+        TweakId           = $Tweak.id
+        TweakName         = $Tweak.name
+        State             = $state
+        Message           = $message
+        Checks            = $checks
+        RequiresReboot    = [bool]$Tweak.requiresReboot
+        RequiresElevation = [bool]$Tweak.requiresElevation
+        RiskLevel         = $Tweak.riskLevel
+        Supported         = $true
+        DefaultBehavior   = $Tweak.defaultBehavior
+        WhenDisabled      = $Tweak.whenDisabled
+    }
+}
+
+function Get-WGEPresetStatus {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Manifest,
+
+        [pscustomobject]$SystemProfile
+    )
+
+    if (-not $SystemProfile) {
+        $SystemProfile = Get-WGESystemProfile
+    }
+
+    $entries = @()
+    foreach ($tweak in $Manifest.tweaks) {
+        $entries += Get-WGETweakStatus -Manifest $Manifest -Tweak $tweak -SystemProfile $SystemProfile
+    }
+
+    $counts = [pscustomobject]@{
+        Applied     = ($entries | Where-Object { $_.State -eq 'Applied' }).Count
+        Partial     = ($entries | Where-Object { $_.State -eq 'Partial' }).Count
+        NotApplied  = ($entries | Where-Object { $_.State -eq 'NotApplied' }).Count
+        Unsupported = ($entries | Where-Object { $_.State -eq 'Unsupported' }).Count
+        Unknown     = ($entries | Where-Object { $_.State -eq 'Unknown' }).Count
+        Total       = $entries.Count
+    }
+
+    return [pscustomobject]@{
+        Timestamp    = (Get-Date).ToString('o')
+        ManifestId   = $Manifest.metadata.id
+        ManifestName = $Manifest.metadata.name
+        ManifestPath = $Manifest.SourcePath
+        Counts       = $counts
+        Entries      = $entries
+    }
+}
+
 function Set-WGEPreset {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(

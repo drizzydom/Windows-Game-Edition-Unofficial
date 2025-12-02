@@ -71,9 +71,29 @@
                         <DataGrid.Columns>
                             <DataGridTextColumn Header="Tweak" Binding="{Binding Name}" Width="200" />
                             <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140" />
-                            <DataGridTextColumn Header="Impact" Binding="{Binding DefaultBehavior}" Width="*" />
-                            <DataGridTextColumn Header="When Disabled" Binding="{Binding WhenDisabled}" Width="*" />
+                            <DataGridTextColumn Header="Impact" Binding="{Binding DefaultBehavior}" Width="*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
+                            <DataGridTextColumn Header="When Disabled" Binding="{Binding WhenDisabled}" Width="*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                             <DataGridTextColumn Header="Risk" Binding="{Binding RiskLevel}" Width="80" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
+                            <DataGridTextColumn Header="Status Details" Binding="{Binding StatusDetails}" Width="2*">
+                                <DataGridTextColumn.ElementStyle>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                    </Style>
+                                </DataGridTextColumn.ElementStyle>
+                            </DataGridTextColumn>
                         </DataGrid.Columns>
                     </DataGrid>
 

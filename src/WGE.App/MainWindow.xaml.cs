@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -8,13 +9,14 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Runtime.CompilerServices;
 
 namespace WGE.App;
 
 public partial class MainWindow : Window
 {
     private readonly ObservableCollection<ManifestSummary> _manifests = new();
-    private readonly ObservableCollection<TweakSummary> _tweaks = new();
+    private readonly ObservableCollection<TweakRow> _tweaks = new();
     private readonly ObservableCollection<ActionResultRow> _results = new();
     private static readonly JsonSerializerOptions AutomationJsonOptions = new()
     {
@@ -72,22 +74,16 @@ public partial class MainWindow : Window
                     continue;
                 }
 
+                var tweakItems = manifest.Tweaks?.ToList() ?? new();
                 var summary = new ManifestSummary(
                     manifest.Metadata.Id ?? Path.GetFileNameWithoutExtension(manifestFile),
                     manifest.Metadata.Name ?? Path.GetFileNameWithoutExtension(manifestFile),
                     manifest.Metadata.Description ?? string.Empty,
                     manifest.Metadata.DefaultState ?? string.Empty,
                     manifest.Metadata.Category ?? string.Empty,
-                    manifest.Tweaks?.Count ?? 0,
+                    tweakItems.Count,
                     manifestFile,
-                    manifest.Tweaks?.Select(t => new TweakSummary(
-                        t.Id ?? string.Empty,
-                        t.Name ?? string.Empty,
-                        t.Category ?? string.Empty,
-                        t.DefaultBehavior ?? string.Empty,
-                        t.WhenDisabled ?? string.Empty,
-                        t.RiskLevel ?? string.Empty
-                    )).ToList() ?? new())
+                    tweakItems)
                 {
                     Tags = manifest.Metadata.Tags?.ToArray() ?? Array.Empty<string>()
                 };
@@ -179,6 +175,11 @@ public partial class MainWindow : Window
         {
             ToggleUiBusy(false);
         }
+
+        if (_selectedManifest is not null)
+        {
+            await RefreshTweakStatusesAsync(_selectedManifest);
+        }
     }
 
     private static AutomationRunResult ExecuteAutomation(string powershellPath, string scriptPath, string presetId, bool dryRun)
@@ -248,8 +249,15 @@ public partial class MainWindow : Window
         _tweaks.Clear();
         foreach (var tweak in summary.Tweaks)
         {
-            _tweaks.Add(tweak);
+            _tweaks.Add(new TweakRow(
+                tweak.Id ?? string.Empty,
+                tweak.Name ?? string.Empty,
+                tweak.Category ?? string.Empty,
+                tweak.DefaultBehavior ?? string.Empty,
+                tweak.WhenDisabled ?? string.Empty,
+                tweak.RiskLevel ?? string.Empty));
         }
+        _ = RefreshTweakStatusesAsync(summary);
     }
 
     private void AppendLog(string message)
@@ -268,6 +276,168 @@ public partial class MainWindow : Window
     {
         ApplyButton.IsEnabled = !busy;
         DryRunButton.IsEnabled = !busy;
+    }
+
+    private async Task RefreshTweakStatusesAsync(ManifestSummary summary)
+    {
+        if (summary is null)
+        {
+            return;
+        }
+
+        var powershellPath = ResolvePowershellPath();
+        if (string.IsNullOrWhiteSpace(powershellPath) || !File.Exists(powershellPath))
+        {
+            AppendLog("Cannot refresh status because Windows PowerShell 5.1 was not found.");
+            return;
+        }
+
+        var scriptPath = Path.Combine(AppContext.BaseDirectory, "Automation", "wge.ps1");
+        if (!File.Exists(scriptPath))
+        {
+            AppendLog("Cannot refresh status because the automation script is missing.");
+            return;
+        }
+
+        var presetId = Path.GetFileNameWithoutExtension(summary.FilePath);
+        try
+        {
+            var result = await Task.Run(() => FetchPresetStatus(powershellPath, scriptPath, presetId));
+            if (result.Summary is null)
+            {
+                if (!string.IsNullOrWhiteSpace(result.StandardOutput))
+                {
+                    AppendLog(result.StandardOutput.Trim());
+                }
+
+                if (!string.IsNullOrWhiteSpace(result.StandardError))
+                {
+                    AppendLog($"stderr: {result.StandardError.Trim()}");
+                }
+
+                AppendLog($"Status probe exited with {result.ExitCode}.");
+                return;
+            }
+
+                var entries = result.Summary.Entries ?? new List<TweakStatusEntry>();
+                var lookup = new Dictionary<string, TweakStatusEntry>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in entries)
+                {
+                    var key = entry?.TweakId ?? string.Empty;
+                    if (string.IsNullOrWhiteSpace(key))
+                    {
+                        continue;
+                    }
+
+                    lookup[key] = entry;
+                }
+            foreach (var row in _tweaks)
+            {
+                if (lookup.TryGetValue(row.Id, out var entry))
+                {
+                    row.Status = MapStatus(entry.State);
+                    row.StatusDetails = FormatStatusDetails(entry);
+                }
+                else
+                {
+                    row.Status = "Unknown";
+                    row.StatusDetails = "No status information returned.";
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Status refresh failed: {ex.Message}");
+        }
+    }
+
+    private static string MapStatus(string? state)
+    {
+        return state?.ToLowerInvariant() switch
+        {
+            "applied" => "Applied",
+            "partial" => "Partial",
+            "notapplied" => "Stock",
+            "failed" => "Error",
+            "error" => "Error",
+            "unsupported" => "Skipped",
+            "pending" => "Pending",
+            "unknown" => "Unknown",
+            _ => "Unknown"
+        };
+    }
+
+    private static string FormatStatusDetails(TweakStatusEntry entry)
+    {
+        var lines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(entry.Message))
+        {
+            lines.Add(entry.Message!);
+        }
+
+        if (entry.Checks is not null && entry.Checks.Count > 0)
+        {
+            foreach (var check in entry.Checks)
+            {
+                if (check is null)
+                {
+                    continue;
+                }
+
+                var status = check.Compliant ? "[OK]" : "[WARN]";
+                var desired = string.IsNullOrWhiteSpace(check.Desired) ? "(unspecified)" : check.Desired;
+                var actual = string.IsNullOrWhiteSpace(check.Actual) ? "(none)" : check.Actual;
+                var extra = string.IsNullOrWhiteSpace(check.Message) ? string.Empty : $" ({check.Message})";
+                lines.Add($"{status} {check.Target} -> wanted {desired}, actual {actual}{extra}");
+            }
+        }
+
+        return lines.Count == 0 ? "No checks defined." : string.Join(Environment.NewLine, lines);
+    }
+
+    private static StatusRunResult FetchPresetStatus(string powershellPath, string scriptPath, string presetId)
+    {
+        var info = new ProcessStartInfo(powershellPath)
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? AppContext.BaseDirectory
+        };
+
+        info.ArgumentList.Add("-NoLogo");
+        info.ArgumentList.Add("-NoProfile");
+        info.ArgumentList.Add("-ExecutionPolicy");
+        info.ArgumentList.Add("Bypass");
+        info.ArgumentList.Add("-File");
+        info.ArgumentList.Add(scriptPath);
+        info.ArgumentList.Add("-Preset");
+        info.ArgumentList.Add(presetId);
+        info.ArgumentList.Add("-Status");
+        info.ArgumentList.Add("-AsJson");
+
+        using var process = new Process { StartInfo = info };
+        process.Start();
+        var stdout = process.StandardOutput.ReadToEnd();
+        var stderr = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        PresetStatusSummary? summary = null;
+        var trimmedOut = stdout.Trim();
+        if (!string.IsNullOrWhiteSpace(trimmedOut))
+        {
+            try
+            {
+                summary = JsonSerializer.Deserialize<PresetStatusSummary>(trimmedOut, AutomationJsonOptions);
+            }
+            catch (JsonException)
+            {
+                // Fall back to textual output.
+            }
+        }
+
+        return new StatusRunResult(summary, stdout, stderr, process.ExitCode);
     }
 
     private void ApplyAutomationSummary(AutomationSummary summary, AutomationRunResult runResult, bool dryRun)
@@ -357,7 +527,7 @@ public partial class MainWindow : Window
     private record ManifestDocument
     {
         public ManifestMetadata? Metadata { get; init; }
-        public ObservableCollection<ManifestTweak>? Tweaks { get; init; }
+        public List<ManifestTweak>? Tweaks { get; init; }
     }
 
     private record ManifestMetadata
@@ -388,19 +558,60 @@ public partial class MainWindow : Window
         string Category,
         int TweakCount,
         string FilePath,
-        List<TweakSummary> Tweaks)
+        List<ManifestTweak> Tweaks)
     {
         public string DisplayName => $"{Name} ({Id})";
         public string[] Tags { get; set; } = Array.Empty<string>();
     }
 
-    private record TweakSummary(
-        string Id,
-        string Name,
-        string Category,
-        string DefaultBehavior,
-        string WhenDisabled,
-        string RiskLevel);
+    private sealed class TweakRow : INotifyPropertyChanged
+    {
+        private string _status = "Pending";
+        private string _statusDetails = string.Empty;
+
+        public TweakRow(string id, string name, string category, string defaultBehavior, string whenDisabled, string riskLevel)
+        {
+            Id = id;
+            Name = name;
+            Category = category;
+            DefaultBehavior = defaultBehavior;
+            WhenDisabled = whenDisabled;
+            RiskLevel = riskLevel;
+            _statusDetails = "Not evaluated yet.";
+        }
+
+        public string Id { get; }
+        public string Name { get; }
+        public string Category { get; }
+        public string DefaultBehavior { get; }
+        public string WhenDisabled { get; }
+        public string RiskLevel { get; }
+
+        public string Status
+        {
+            get => _status;
+            set => SetField(ref _status, value ?? "Unknown");
+        }
+
+        public string StatusDetails
+        {
+            get => _statusDetails;
+            set => SetField(ref _statusDetails, value ?? string.Empty);
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void SetField(ref string field, string value, [CallerMemberName] string? propertyName = null)
+        {
+            if (field == value)
+            {
+                return;
+            }
+
+            field = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
 
     private sealed record AutomationRunResult(AutomationSummary? Summary, string StandardOutput, string StandardError, int ExitCode);
 
@@ -439,6 +650,34 @@ public partial class MainWindow : Window
         public string? SkipReason { get; init; }
         public string? ErrorMessage { get; init; }
     }
+
+    private sealed record PresetStatusSummary
+    {
+        public string? PresetId { get; init; }
+        public string? PresetName { get; init; }
+        public string? Message { get; init; }
+        public List<TweakStatusEntry> Entries { get; init; } = new();
+    }
+
+    private sealed record TweakStatusEntry
+    {
+        public string? TweakId { get; init; }
+        public string? TweakName { get; init; }
+        public string? State { get; init; }
+        public string? Message { get; init; }
+        public List<TweakStatusCheck> Checks { get; init; } = new();
+    }
+
+    private sealed record TweakStatusCheck
+    {
+        public string? Target { get; init; }
+        public bool Compliant { get; init; }
+        public string? Desired { get; init; }
+        public string? Actual { get; init; }
+        public string? Message { get; init; }
+    }
+
+    private sealed record StatusRunResult(PresetStatusSummary? Summary, string StandardOutput, string StandardError, int ExitCode);
 
     private sealed record ActionResultRow(string Status, string TweakName, string Target, string Message, string Details);
 }

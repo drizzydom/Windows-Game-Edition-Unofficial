@@ -1,22 +1,28 @@
 [CmdletBinding(DefaultParameterSetName = 'Apply')]
 param(
     [Parameter(ParameterSetName = 'Apply')]
+    [Parameter(ParameterSetName = 'Status')]
     [string]$Preset = 'performance',
 
     [Parameter(ParameterSetName = 'Apply')]
     [switch]$DryRun,
 
     [Parameter(ParameterSetName = 'Apply')]
+    [Parameter(ParameterSetName = 'Status')]
     [switch]$SkipUnsupported,
+
+    [Parameter(ParameterSetName = 'Apply')]
+    [Parameter(ParameterSetName = 'Status')]
+    [switch]$AsJson,
+
+    [Parameter(ParameterSetName = 'Status', Mandatory)]
+    [switch]$Status,
 
     [Parameter(ParameterSetName = 'List', Mandatory, ValueFromPipelineByPropertyName)]
     [switch]$List,
 
     [Parameter(ParameterSetName = 'List')]
-    [switch]$VerboseSkus,
-
-    [Parameter(ParameterSetName = 'Apply')]
-    [switch]$AsJson
+    [switch]$VerboseSkus
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +68,45 @@ $loadedManifest = Get-WGEManifest -Path $targetManifest
 
 $profile = Get-WGESystemProfile
 Write-Verbose "Detected SKU: $($profile.ProductName) ($($profile.EditionId)) build $($profile.BuildNumber)"
+
+if ($Status) {
+    $statusReport = Get-WGEPresetStatus -Manifest $loadedManifest -SystemProfile $profile
+    if ($SkipUnsupported) {
+        $statusReport.Entries = @($statusReport.Entries | Where-Object { $_.Supported })
+        $statusReport.Counts = [pscustomobject]@{
+            Applied     = ($statusReport.Entries | Where-Object { $_.State -eq 'Applied' }).Count
+            Partial     = ($statusReport.Entries | Where-Object { $_.State -eq 'Partial' }).Count
+            NotApplied  = ($statusReport.Entries | Where-Object { $_.State -eq 'NotApplied' }).Count
+            Unsupported = 0
+            Unknown     = ($statusReport.Entries | Where-Object { $_.State -eq 'Unknown' }).Count
+            Total       = $statusReport.Entries.Count
+        }
+    }
+
+    if ($AsJson) {
+        $statusReport | ConvertTo-Json -Depth 6
+        return
+    }
+
+    Write-Output "Preset '$($statusReport.ManifestName)' status (Applied: $($statusReport.Counts.Applied)/$($statusReport.Counts.Total))"
+    foreach ($entry in $statusReport.Entries) {
+        $marker = switch ($entry.State) {
+            'Applied'     { '[applied]' }
+            'Partial'     { '[partial]' }
+            'NotApplied'  { '[stock]' }
+            'Unsupported' { '[skip]' }
+            default       { '[unknown]' }
+        }
+        $line = " $marker $($entry.TweakName) :: $($entry.Message)"
+        Write-Output $line
+        foreach ($check in $entry.Checks) {
+            if (-not $check) { continue }
+            $statusLabel = if ($check.Compliant) { '✓' } else { '✗' }
+            Write-Output ("    {0} {1} => desired {2}, actual {3}" -f $statusLabel, $check.Target, $check.Desired, $check.Actual)
+        }
+    }
+    return
+}
 
 $whatIf = $DryRun.IsPresent
 $initialPreference = $WhatIfPreference

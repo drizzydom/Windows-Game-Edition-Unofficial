@@ -15,6 +15,8 @@
         'Invoke-WGETweak',
         'Set-WGEPreset',
         'Get-WGEUndoPlan',
+        'Get-WGEPresetStatus',
+        'Get-WGETweakStatus',
         'Test-WGETweakSupport',
         'Test-WGEAdminSession',
         'Export-WGEActionLog'
@@ -32,7 +34,7 @@
         PSData = @{
             Tags        = @('windows', 'gaming', 'automation')
             ProjectUri  = 'https://github.com/drizzydom/Windows-Game-Edition-Unofficial'
-            ReleaseNotes = 'Adds action logging, undo planning, structured summaries, and scheduled task/registry command support.'
+            ReleaseNotes = 'Adds action logging, undo planning, structured summaries, status inspection, and aggressive Delivery Optimization shutdown handling.'
         }
     }
 }
