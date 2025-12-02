@@ -7,3 +7,16 @@ dist/
 .vscode/
 *.log
 *.tmp
+
+# .NET build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.cache
+publish/
+
+# IDE and editor files
+*.swp
+*~
+.idea/

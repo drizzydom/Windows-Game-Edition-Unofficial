@@ -8,6 +8,9 @@ param(
     [switch]$DryRun,
 
     [Parameter(ParameterSetName = 'Apply')]
+    [switch]$Revert,
+
+    [Parameter(ParameterSetName = 'Apply')]
     [Parameter(ParameterSetName = 'Status')]
     [switch]$SkipUnsupported,
 
@@ -109,20 +112,23 @@ if ($Status) {
 }
 
 $whatIf = $DryRun.IsPresent
+$action = if ($Revert.IsPresent) { 'Enable' } else { 'Disable' }
 $initialPreference = $WhatIfPreference
 try {
     if ($whatIf) {
         $WhatIfPreference = $true
     }
 
-    $results = Set-WGEPreset -Manifest $loadedManifest -Action 'Disable' -SkipUnsupported:$SkipUnsupported.IsPresent
+    $results = Set-WGEPreset -Manifest $loadedManifest -Action $action -SkipUnsupported:$SkipUnsupported.IsPresent
 
     if (-not $results -or $results.Count -eq 0) {
+        $actionLabel = if ($Revert.IsPresent) { 'Reverted' } else { 'Applied' }
         $summary = [pscustomobject]@{
             PresetId       = $loadedManifest.metadata.id
             PresetName     = $loadedManifest.metadata.name
             ManifestPath   = $loadedManifest.SourcePath
             DryRun         = $whatIf
+            Revert         = $Revert.IsPresent
             ActionLogPath  = $null
             Counts         = [pscustomobject]@{
                 Total     = 0
@@ -144,7 +150,7 @@ try {
         return
     }
 
-    $operation = if ($whatIf) { 'Previewed' } else { 'Applied' }
+    $operation = if ($whatIf) { 'Previewed' } elseif ($Revert.IsPresent) { 'Reverted' } else { 'Applied' }
     $statusEntries = foreach ($entry in $results) {
         $status = if ($entry.Skipped) {
             'skip'
@@ -194,6 +200,7 @@ try {
         PresetName     = $loadedManifest.metadata.name
         ManifestPath   = $loadedManifest.SourcePath
         DryRun         = $whatIf
+        Revert         = $Revert.IsPresent
         ActionLogPath  = $logPath
         Counts         = $counts
         Entries        = $statusEntries

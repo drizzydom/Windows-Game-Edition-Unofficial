@@ -108,15 +108,15 @@ public partial class MainWindow : Window
 
     private async void ApplyButton_OnClick(object sender, RoutedEventArgs e)
     {
-        await RunPresetAsync(dryRun: false);
+        await RunPresetAsync(dryRun: false, revert: false);
     }
 
     private async void DryRunButton_OnClick(object sender, RoutedEventArgs e)
     {
-        await RunPresetAsync(dryRun: true);
+        await RunPresetAsync(dryRun: true, revert: false);
     }
 
-    private async Task RunPresetAsync(bool dryRun)
+    private async Task RunPresetAsync(bool dryRun, bool revert)
     {
         if (_selectedManifest is null)
         {
@@ -139,14 +139,17 @@ public partial class MainWindow : Window
         }
 
         var presetId = Path.GetFileNameWithoutExtension(_selectedManifest.FilePath);
-        AppendLog($"Launching preset '{_selectedManifest.Name}' ({presetId}) with dryRun={(dryRun ? "true" : "false")}.");
+        var action = revert ? "reverting" : "applying";
+        var actionLabel = revert ? "Reverting" : (dryRun ? "Previewing" : "Applying");
+        AppendLog($"{actionLabel} preset '{_selectedManifest.Name}' ({presetId})...");
 
         ToggleUiBusy(true);
+        ShowLoading(true, $"{actionLabel} tweaks...");
         _results.Clear();
 
         try
         {
-            var runResult = await Task.Run(() => ExecuteAutomation(powershellPath, scriptPath, presetId, dryRun));
+            var runResult = await Task.Run(() => ExecuteAutomation(powershellPath, scriptPath, presetId, dryRun, revert));
             if (runResult.Summary is not null)
             {
                 ApplyAutomationSummary(runResult.Summary, runResult, dryRun);
@@ -174,15 +177,18 @@ public partial class MainWindow : Window
         finally
         {
             ToggleUiBusy(false);
+            ShowLoading(false);
         }
 
         if (_selectedManifest is not null)
         {
+            ShowLoading(true, "Refreshing status...");
             await RefreshTweakStatusesAsync(_selectedManifest);
+            ShowLoading(false);
         }
     }
 
-    private static AutomationRunResult ExecuteAutomation(string powershellPath, string scriptPath, string presetId, bool dryRun)
+    private static AutomationRunResult ExecuteAutomation(string powershellPath, string scriptPath, string presetId, bool dryRun, bool revert)
     {
         var info = new ProcessStartInfo(powershellPath)
         {
@@ -206,6 +212,10 @@ public partial class MainWindow : Window
         if (dryRun)
         {
             info.ArgumentList.Add("-DryRun");
+        }
+        if (revert)
+        {
+            info.ArgumentList.Add("-Revert");
         }
 
         using var process = new Process { StartInfo = info };
@@ -257,7 +267,14 @@ public partial class MainWindow : Window
                 tweak.WhenDisabled ?? string.Empty,
                 tweak.RiskLevel ?? string.Empty));
         }
-        _ = RefreshTweakStatusesAsync(summary);
+        _ = RefreshTweakStatusesWithLoadingAsync(summary);
+    }
+
+    private async Task RefreshTweakStatusesWithLoadingAsync(ManifestSummary summary)
+    {
+        ShowLoading(true, "Checking current system status...");
+        await RefreshTweakStatusesAsync(summary);
+        ShowLoading(false);
     }
 
     private void AppendLog(string message)
@@ -276,6 +293,94 @@ public partial class MainWindow : Window
     {
         ApplyButton.IsEnabled = !busy;
         DryRunButton.IsEnabled = !busy;
+        RevertButton.IsEnabled = !busy;
+        RefreshButton.IsEnabled = !busy;
+        ManifestList.IsEnabled = !busy;
+    }
+
+    private void ShowLoading(bool show, string message = "Checking system status...")
+    {
+        LoadingOverlay.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        LoadingText.Text = message;
+    }
+
+    private void AboutButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        var aboutMessage = @"Windows Game Edition (Unofficial)
+Version 0.1.0
+
+A friendly tool to optimize your Windows PC for gaming by disabling 
+unnecessary services and processes - all while keeping anti-cheat 
+compatibility intact!
+
+Inspired by SteamOS and the Steam Deck experience, this project aims 
+to bring that same level of optimization to Windows gamers.
+
+Key Features:
+• One-click optimization presets
+• Full reversibility - undo any changes instantly
+• Safe defaults that won't break your games
+• Privacy-focused options to reduce telemetry
+
+This is an open-source community project. All changes are logged 
+and can be reviewed before applying.
+
+⚠️ Always run as Administrator for full functionality.
+
+GitHub: github.com/drizzydom/Windows-Game-Edition-Unofficial";
+
+        MessageBox.Show(aboutMessage, "About Windows Game Edition", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private async void RefreshButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            ToggleUiBusy(true);
+            LoadManifests();
+            
+            if (_selectedManifest is not null)
+            {
+                ShowLoading(true, "Refreshing tweak status...");
+                await RefreshTweakStatusesAsync(_selectedManifest);
+                ShowLoading(false);
+            }
+            
+            AppendLog("Refreshed presets and status information.");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Refresh failed: {ex.Message}");
+        }
+        finally
+        {
+            ToggleUiBusy(false);
+            ShowLoading(false);
+        }
+    }
+
+    private async void RevertButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedManifest is null)
+        {
+            AppendLog("Select a preset first before reverting.");
+            return;
+        }
+
+        var result = MessageBox.Show(
+            $"This will restore the original Windows settings for the '{_selectedManifest.Name}' preset.\n\n" +
+            "Are you sure you want to revert all changes?\n\n" +
+            "Note: A system restart may be required for some changes to take effect.",
+            "Confirm Revert",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+
+        if (result != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        await RunPresetAsync(dryRun: false, revert: true);
     }
 
     private async Task RefreshTweakStatusesAsync(ManifestSummary summary)
@@ -324,7 +429,7 @@ public partial class MainWindow : Window
                 foreach (var entry in entries)
                 {
                     var key = entry?.TweakId ?? string.Empty;
-                    if (string.IsNullOrWhiteSpace(key))
+                    if (string.IsNullOrWhiteSpace(key) || entry is null)
                     {
                         continue;
                     }
