@@ -5,10 +5,10 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Windows Game Edition (Unofficial)"
-        Width="1100"
-        Height="700"
-        MinWidth="950"
-        MinHeight="650"
+        Width="1200"
+        Height="800"
+        MinWidth="900"
+        MinHeight="600"
         Background="#15171c"
         WindowStartupLocation="CenterScreen">
 
@@ -173,10 +173,11 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
-            <RowDefinition Height="200" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="180" MinHeight="100" MaxHeight="350" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Background="#20232a" Padding="20">
+        <Border Grid.Row="0" Background="#20232a" Padding="16,14">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
@@ -184,36 +185,36 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Orientation="Vertical">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="&#x1F3AE;" FontSize="28" Margin="0,0,12,0" VerticalAlignment="Center" />
-                        <TextBlock Text="Windows Game Edition" FontSize="26" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
-                        <Border Background="#3b82f6" CornerRadius="4" Padding="8,3" Margin="12,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="Unofficial" FontSize="11" Foreground="White" FontWeight="SemiBold" />
+                        <TextBlock Text="&#x1F3AE;" FontSize="24" Margin="0,0,10,0" VerticalAlignment="Center" />
+                        <TextBlock Text="Windows Game Edition" FontSize="22" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+                        <Border Background="#3b82f6" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="Unofficial" FontSize="10" Foreground="White" FontWeight="SemiBold" />
                         </Border>
                     </StackPanel>
                     <TextBlock Text="Optimize your Windows gaming experience by disabling unnecessary services and processes. All changes are reversible!" 
-                               Foreground="#cfd2da" Margin="0,8,0,0" TextWrapping="Wrap" />
+                               Foreground="#cfd2da" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="12" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="AboutButton" Content="&#x2139; About" Style="{StaticResource ModernButton}" 
-                            Margin="0,0,10,0" Click="AboutButton_OnClick" ToolTip="Learn more about Windows Game Edition" />
+                            Margin="0,0,8,0" Click="AboutButton_OnClick" ToolTip="Learn more about Windows Game Edition" />
                     <Button x:Name="RefreshButton" Content="&#x1F504; Refresh" Style="{StaticResource ModernButton}" 
                             Click="RefreshButton_OnClick" ToolTip="Reload presets and refresh status" />
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="10,15,10,10">
+        <Grid Grid.Row="1" Margin="10,12,10,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="260" />
-                <ColumnDefinition Width="6" />
+                <ColumnDefinition Width="240" MinWidth="180" MaxWidth="320" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" BorderBrush="#3c4049" BorderThickness="1" CornerRadius="6" Padding="10" Background="#111318">
                 <DockPanel>
-                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                        <TextBlock Text="&#x1F4E6; Presets" FontWeight="Bold" FontSize="16" Foreground="White" />
-                        <TextBlock Text="Select a category to configure" Foreground="#9ba0b2" FontSize="12" Margin="0,4,0,0" />
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <TextBlock Text="&#x1F4E6; Presets" FontWeight="Bold" FontSize="14" Foreground="White" />
+                        <TextBlock Text="Select a category" Foreground="#9ba0b2" FontSize="11" Margin="0,3,0,0" />
                     </StackPanel>
                     <ListBox x:Name="ManifestList"
                              DisplayMemberPath="DisplayName"
@@ -221,80 +222,83 @@
                 </DockPanel>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="6" Margin="4,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#3c4049" />
+            <GridSplitter Grid.Column="1" Width="6" Margin="3,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="Transparent" />
 
-            <Border Grid.Column="2" BorderBrush="#3c4049" BorderThickness="1" CornerRadius="6" Padding="14" Background="#111318">
+            <Border Grid.Column="2" BorderBrush="#3c4049" BorderThickness="1" CornerRadius="6" Padding="12" Background="#111318">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Row="0" Orientation="Vertical">
-                        <TextBlock x:Name="PresetTitle" Text="Select a preset to see details" FontSize="22" FontWeight="Bold" Foreground="White" />
-                        <TextBlock x:Name="PresetDescription" Text="" Foreground="#cfd2da" Margin="0,6,0,0" TextWrapping="Wrap" FontSize="14" />
-                        <TextBlock x:Name="PresetMeta" Text="" Foreground="#9ba0b2" Margin="0,6,0,0" FontSize="12" />
+                    <StackPanel Grid.Row="0" Orientation="Vertical" Margin="0,0,0,10">
+                        <TextBlock x:Name="PresetTitle" Text="Select a preset to see details" FontSize="18" FontWeight="Bold" Foreground="White" />
+                        <TextBlock x:Name="PresetDescription" Text="" Foreground="#cfd2da" Margin="0,4,0,0" TextWrapping="Wrap" FontSize="13" />
+                        <TextBlock x:Name="PresetMeta" Text="" Foreground="#9ba0b2" Margin="0,4,0,0" FontSize="11" />
                     </StackPanel>
 
                     <!-- Loading indicator -->
-                    <Border x:Name="LoadingOverlay" Grid.Row="2" Background="#80111318" Visibility="Collapsed" CornerRadius="6" Margin="0,12,0,12">
+                    <Border x:Name="LoadingOverlay" Grid.Row="1" Background="#80111318" Visibility="Collapsed" CornerRadius="6">
                         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock Text="&#x23F3;" FontSize="32" HorizontalAlignment="Center" Foreground="#3b82f6" />
-                            <TextBlock x:Name="LoadingText" Text="Checking system status..." Foreground="#cfd2da" Margin="0,8,0,0" FontSize="14" />
+                            <TextBlock Text="&#x23F3;" FontSize="28" HorizontalAlignment="Center" Foreground="#3b82f6" />
+                            <TextBlock x:Name="LoadingText" Text="Checking system status..." Foreground="#cfd2da" Margin="0,6,0,0" FontSize="13" />
                         </StackPanel>
                     </Border>
 
-                    <DataGrid Grid.Row="2"
+                    <DataGrid Grid.Row="1"
                               x:Name="TweaksGrid"
                               AutoGenerateColumns="False"
                               CanUserAddRows="False"
                               IsReadOnly="True"
-                              Margin="0,12,0,12"
                               HeadersVisibility="Column"
                               AlternatingRowBackground="#1c1f26"
                               RowBackground="Transparent"
                               Foreground="White"
                               GridLinesVisibility="None"
-                              Background="Transparent">
+                              Background="Transparent"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Tweak" Binding="{Binding Name}" Width="200" />
-                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="140" />
-                            <DataGridTextColumn Header="Impact" Binding="{Binding DefaultBehavior}" Width="*">
+                            <DataGridTextColumn Header="Tweak" Binding="{Binding Name}" Width="160">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
-                                        <Setter Property="TextWrapping" Value="Wrap" />
+                                        <Setter Property="TextWrapping" Value="NoWrap" />
+                                        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                        <Setter Property="ToolTip" Value="{Binding Name}" />
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
-                            <DataGridTextColumn Header="When Disabled" Binding="{Binding WhenDisabled}" Width="*">
+                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100" />
+                            <DataGridTextColumn Header="What it Does" Binding="{Binding DefaultBehavior}" Width="*">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextWrapping" Value="Wrap" />
+                                        <Setter Property="MaxHeight" Value="60" />
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
-                            <DataGridTextColumn Header="Risk" Binding="{Binding RiskLevel}" Width="80" />
-                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="100" />
-                            <DataGridTextColumn Header="Status Details" Binding="{Binding StatusDetails}" Width="2*">
+                            <DataGridTextColumn Header="Effect" Binding="{Binding WhenDisabled}" Width="*">
                                 <DataGridTextColumn.ElementStyle>
                                     <Style TargetType="TextBlock">
                                         <Setter Property="TextWrapping" Value="Wrap" />
+                                        <Setter Property="MaxHeight" Value="60" />
                                     </Style>
                                 </DataGridTextColumn.ElementStyle>
                             </DataGridTextColumn>
+                            <DataGridTextColumn Header="Risk" Binding="{Binding RiskLevel}" Width="60" />
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="70" />
                         </DataGrid.Columns>
                     </DataGrid>
 
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
-                        <Button x:Name="RevertButton" Content="&#x21A9; Revert Changes" Style="{StaticResource WarningButton}" 
-                                Margin="0,0,10,0" Click="RevertButton_OnClick" 
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                        <Button x:Name="RevertButton" Content="&#x21A9; Revert" Style="{StaticResource WarningButton}" 
+                                Margin="0,0,8,0" Click="RevertButton_OnClick" 
                                 ToolTip="Undo all changes made by this preset and restore original settings" />
                         <Button x:Name="DryRunButton" Content="&#x1F441; Preview" Style="{StaticResource ModernButton}" 
-                                Margin="0,0,10,0" Click="DryRunButton_OnClick"
+                                Margin="0,0,8,0" Click="DryRunButton_OnClick"
                                 ToolTip="See what changes would be made without actually applying them" />
-                        <Button x:Name="ApplyButton" Content="&#x2705; Apply Preset" Style="{StaticResource PrimaryButton}" 
+                        <Button x:Name="ApplyButton" Content="&#x2705; Apply" Style="{StaticResource PrimaryButton}" 
                                 Click="ApplyButton_OnClick"
                                 ToolTip="Apply all tweaks in this preset to optimize your system for gaming" />
                     </StackPanel>
@@ -302,58 +306,66 @@
             </Border>
         </Grid>
 
-        <Border Grid.Row="2" Margin="10,0,10,10" BorderBrush="#3c4049" BorderThickness="1" CornerRadius="6" Background="#111318" Padding="10">
+        <!-- Resizable splitter between main content and log -->
+        <GridSplitter Grid.Row="2" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#3c4049" 
+                      ResizeDirection="Rows" ShowsPreview="True" />
+
+        <Border Grid.Row="3" Margin="10,4,10,10" BorderBrush="#3c4049" BorderThickness="1" CornerRadius="6" Background="#111318" Padding="10">
             <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="80" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
 
-                <StackPanel Grid.Row="0" Orientation="Horizontal">
-                    <TextBlock Text="&#x1F4DD;" FontSize="14" Margin="0,0,6,0" />
-                    <TextBlock Text="Session Log" FontWeight="Bold" Foreground="White" />
-                </StackPanel>
-                <TextBox Grid.Row="1"
-                         x:Name="LogBox"
-                         IsReadOnly="True"
-                         TextWrapping="Wrap"
-                         Background="#0d0f12"
-                         Foreground="#cfd2da"
-                         BorderThickness="1"
-                         BorderBrush="#3c4049"
-                         AcceptsReturn="True"
-                         VerticalScrollBarVisibility="Auto"
-                         Margin="0,6,0,12"
-                         Padding="8"
-                         FontFamily="Consolas, Courier New, monospace"
-                         FontSize="12" />
+                <!-- Session Log (left side) -->
+                <DockPanel Grid.Column="0">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="&#x1F4DD;" FontSize="12" Margin="0,0,4,0" />
+                        <TextBlock Text="Session Log" FontWeight="Bold" Foreground="White" FontSize="12" />
+                    </StackPanel>
+                    <TextBox x:Name="LogBox"
+                             IsReadOnly="True"
+                             TextWrapping="Wrap"
+                             Background="#0d0f12"
+                             Foreground="#cfd2da"
+                             BorderThickness="1"
+                             BorderBrush="#3c4049"
+                             AcceptsReturn="True"
+                             VerticalScrollBarVisibility="Auto"
+                             Padding="6"
+                             FontFamily="Consolas, Courier New, monospace"
+                             FontSize="11" />
+                </DockPanel>
 
-                <StackPanel Grid.Row="2" Orientation="Horizontal">
-                    <TextBlock Text="&#x1F4CA;" FontSize="14" Margin="0,0,6,0" />
-                    <TextBlock Text="Action Breakdown" FontWeight="Bold" Foreground="White" />
-                </StackPanel>
-                <DataGrid Grid.Row="3"
-                          x:Name="ResultGrid"
-                          AutoGenerateColumns="False"
-                          CanUserAddRows="False"
-                          IsReadOnly="True"
-                          Margin="0,6,0,0"
-                          HeadersVisibility="Column"
-                          AlternatingRowBackground="#1c1f26"
-                          RowBackground="Transparent"
-                          Foreground="White"
-                          GridLinesVisibility="None"
-                          Background="Transparent">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="80" />
-                        <DataGridTextColumn Header="Tweak" Binding="{Binding TweakName}" Width="180" />
-                        <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="220" />
-                        <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
-                        <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
-                    </DataGrid.Columns>
-                </DataGrid>
+                <GridSplitter Grid.Column="1" Width="6" Margin="6,24,6,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="Transparent" />
+
+                <!-- Action Breakdown (right side) -->
+                <DockPanel Grid.Column="2">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="&#x1F4CA;" FontSize="12" Margin="0,0,4,0" />
+                        <TextBlock Text="Action Results" FontWeight="Bold" Foreground="White" FontSize="12" />
+                    </StackPanel>
+                    <DataGrid x:Name="ResultGrid"
+                              AutoGenerateColumns="False"
+                              CanUserAddRows="False"
+                              IsReadOnly="True"
+                              HeadersVisibility="Column"
+                              AlternatingRowBackground="#1c1f26"
+                              RowBackground="Transparent"
+                              Foreground="White"
+                              GridLinesVisibility="None"
+                              Background="Transparent"
+                              VerticalScrollBarVisibility="Auto"
+                              FontSize="11">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Status" Binding="{Binding Status}" Width="55" />
+                            <DataGridTextColumn Header="Tweak" Binding="{Binding TweakName}" Width="140" />
+                            <DataGridTextColumn Header="Target" Binding="{Binding Target}" Width="140" />
+                            <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </Grid>
         </Border>
     </Grid>

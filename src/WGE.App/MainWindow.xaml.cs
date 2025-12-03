@@ -37,23 +37,68 @@ public partial class MainWindow : Window
     {
         try
         {
+            // Log paths for debugging (helps diagnose single-file publish issues)
+            AppendLog($"🔍 BaseDirectory: {AppContext.BaseDirectory}");
+            AppendLog($"🔍 CurrentDirectory: {Environment.CurrentDirectory}");
+            AppendLog($"🔍 ProcessPath: {Environment.ProcessPath ?? "(null)"}");
+            
             LoadManifests();
         }
         catch (Exception ex)
         {
-            AppendLog($"Failed to load manifests: {ex.Message}");
+            AppendLog($"❌ Failed to load manifests: {ex.Message}");
+            AppendLog($"   Stack: {ex.StackTrace}");
         }
     }
 
     private void LoadManifests()
     {
         _manifests.Clear();
-        var automationRoot = Path.Combine(AppContext.BaseDirectory, "Automation");
-        var manifestRoot = Path.Combine(automationRoot, "manifests");
-
-        if (!Directory.Exists(manifestRoot))
+        
+        // Try multiple possible locations for the Automation folder
+        // Single-file publish can behave differently than normal execution
+        var baseDir = AppContext.BaseDirectory;
+        var exeDir = Path.GetDirectoryName(Environment.ProcessPath) ?? baseDir;
+        var currentDir = Environment.CurrentDirectory;
+        
+        var possibleRoots = new[]
         {
-            AppendLog($"Manifest directory not found: {manifestRoot}");
+            Path.Combine(baseDir, "Automation", "manifests"),
+            Path.Combine(exeDir, "Automation", "manifests"),
+            Path.Combine(currentDir, "Automation", "manifests"),
+            // Also check lowercase versions (case sensitivity on some systems)
+            Path.Combine(baseDir, "automation", "manifests"),
+            Path.Combine(exeDir, "automation", "manifests"),
+        };
+
+        string? manifestRoot = null;
+        foreach (var path in possibleRoots)
+        {
+            AppendLog($"🔎 Checking: {path}");
+            if (Directory.Exists(path))
+            {
+                manifestRoot = path;
+                AppendLog($"✅ Found manifest directory: {path}");
+                break;
+            }
+        }
+
+        if (manifestRoot is null)
+        {
+            AppendLog("❌ Manifest directory not found in any expected location.");
+            AppendLog("💡 Make sure the Automation folder is in the same directory as the executable.");
+            
+            // List what IS in the base directory to help debug
+            try
+            {
+                var files = Directory.GetFileSystemEntries(baseDir);
+                AppendLog($"📂 Contents of {baseDir}:");
+                foreach (var f in files.Take(20))
+                {
+                    AppendLog($"   • {Path.GetFileName(f)}");
+                }
+            }
+            catch { /* ignore listing errors */ }
             return;
         }
 
@@ -62,19 +107,32 @@ public partial class MainWindow : Window
             PropertyNameCaseInsensitive = true
         };
 
-        foreach (var manifestFile in Directory.EnumerateFiles(manifestRoot, "*.json", SearchOption.TopDirectoryOnly))
+        var jsonFiles = Directory.EnumerateFiles(manifestRoot, "*.json", SearchOption.TopDirectoryOnly).ToList();
+        AppendLog($"📋 Found {jsonFiles.Count} JSON file(s) in manifest directory");
+
+        foreach (var manifestFile in jsonFiles)
         {
+            AppendLog($"📄 Loading: {Path.GetFileName(manifestFile)}");
             try
             {
-                using var stream = File.OpenRead(manifestFile);
-                var manifest = JsonSerializer.Deserialize<ManifestDocument>(stream, options);
-                if (manifest?.Metadata is null)
+                var jsonContent = File.ReadAllText(manifestFile);
+                var manifest = JsonSerializer.Deserialize<ManifestDocument>(jsonContent, options);
+                
+                if (manifest is null)
                 {
-                    AppendLog($"Skipping manifest with missing metadata: {manifestFile}");
+                    AppendLog($"   ⚠️ Deserialized to null: {manifestFile}");
+                    continue;
+                }
+                
+                if (manifest.Metadata is null)
+                {
+                    AppendLog($"   ⚠️ Missing metadata: {manifestFile}");
                     continue;
                 }
 
                 var tweakItems = manifest.Tweaks?.ToList() ?? new();
+                AppendLog($"   ✅ Loaded: {manifest.Metadata.Name} with {tweakItems.Count} tweaks");
+                
                 var summary = new ManifestSummary(
                     manifest.Metadata.Id ?? Path.GetFileNameWithoutExtension(manifestFile),
                     manifest.Metadata.Name ?? Path.GetFileNameWithoutExtension(manifestFile),
@@ -90,19 +148,26 @@ public partial class MainWindow : Window
 
                 _manifests.Add(summary);
             }
+            catch (JsonException jex)
+            {
+                AppendLog($"   ❌ JSON parse error: {jex.Message}");
+            }
             catch (Exception ex)
             {
-                AppendLog($"Could not parse manifest '{manifestFile}': {ex.Message}");
+                AppendLog($"   ❌ Error: {ex.Message}");
             }
         }
 
+        AppendLog($"📊 Total presets loaded: {_manifests.Count}");
+        
         if (_manifests.Count == 0)
         {
-            AppendLog("No manifests were found. Drop JSON manifest files into Automation/Manifests to continue.");
+            AppendLog("💡 No presets were loaded. Check the log above for errors.");
         }
         else
         {
             ManifestList.SelectedIndex = 0;
+            AppendLog("✨ Ready! Select a preset from the left panel to begin.");
         }
     }
 
