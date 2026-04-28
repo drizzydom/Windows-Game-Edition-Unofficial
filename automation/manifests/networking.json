@@ -199,6 +199,43 @@
         ]
       },
       "notes": "Windows Update will still run when you manually press 'Check for updates'. Feature updates may re-enable these tasks automatically."
+    },
+    {
+      "id": "net-persist",
+      "name": "Boot Persistence",
+      "category": "System",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Windows Update can re-enable the Update Orchestrator tasks and Delivery Optimization after major patches, quietly restoring bandwidth usage during gaming sessions.",
+      "whenDisabled": "Registers a startup scheduled task under \\WGE\\ that re-applies network tweaks at every boot. Delivery Optimization and the Update Orchestrator tasks stay off even after Windows Update interferes.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["persistence", "scheduled-task"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "startupTask",
+            "taskPath": "\\WGE\\",
+            "taskName": "WGE-networking-Persist",
+            "action": "Register",
+            "undoAction": "Remove"
+          }
+        ],
+        "enable": [
+          {
+            "type": "startupTask",
+            "taskPath": "\\WGE\\",
+            "taskName": "WGE-networking-Persist",
+            "action": "Remove",
+            "undoAction": "Register"
+          }
+        ]
+      },
+      "notes": "Visible in Task Scheduler under \\WGE\\. Re-run Apply if the dist folder is ever moved to update the task's stored script path."
     }
   ]
 }

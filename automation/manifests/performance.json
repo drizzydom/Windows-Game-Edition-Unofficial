@@ -58,6 +58,43 @@
         ]
       },
       "notes": "Skip this tweak on machines that still rely on HDDs for most games."
+    },
+    {
+      "id": "perf-persist",
+      "name": "Boot Persistence",
+      "category": "System",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Windows Update can silently reset service startup types after patches, undoing performance tweaks without any notification.",
+      "whenDisabled": "Registers a startup scheduled task under \\WGE\\ that re-applies this performance preset at every boot. Keeps SysMain and other services disabled even after Windows Update meddles with them.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["persistence", "scheduled-task"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "startupTask",
+            "taskPath": "\\WGE\\",
+            "taskName": "WGE-performance-Persist",
+            "action": "Register",
+            "undoAction": "Remove"
+          }
+        ],
+        "enable": [
+          {
+            "type": "startupTask",
+            "taskPath": "\\WGE\\",
+            "taskName": "WGE-performance-Persist",
+            "action": "Remove",
+            "undoAction": "Register"
+          }
+        ]
+      },
+      "notes": "Visible in Task Scheduler under \\WGE\\. If you move the dist folder after applying, re-run Apply to update the task's script path."
     }
   ]
 }

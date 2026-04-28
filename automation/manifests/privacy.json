@@ -199,6 +199,74 @@
         ]
       },
       "notes": "SKU limits apply: Windows 10/11 Home and Pro treat 0 as 'Required' only; Enterprise/Education honor true Security-only telemetry."
+    },
+    {
+      "id": "policy-enforce-apply",
+      "name": "Enforce Policy Changes Immediately",
+      "category": "Policy",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Registry changes written to HKLM:\\SOFTWARE\\Policies\\... are only picked up by running processes on the next Group Policy background refresh cycle, which happens roughly every 90 minutes.",
+      "whenDisabled": "Triggers an immediate non-blocking Group Policy refresh (gpupdate /force) so the telemetry and privacy policy changes take effect right now, not in an hour and a half.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["policy"],
+      "dependencies": ["reg-telemetry-level"],
+      "commands": {
+        "disable": [
+          {
+            "type": "gpupdate",
+            "action": "Run"
+          }
+        ],
+        "enable": [
+          {
+            "type": "gpupdate",
+            "action": "Run"
+          }
+        ]
+      },
+      "notes": "gpupdate is run with /wait:0 so it's non-blocking. The /target:computer flag limits the refresh to machine policies only, which is all we modified."
+    },
+    {
+      "id": "privacy-persist",
+      "name": "Boot Persistence",
+      "category": "System",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Windows Update and the CBS (Component Based Servicing) stack can silently reset service startup types and re-enable scheduled tasks after feature updates or even monthly patches.",
+      "whenDisabled": "Registers a startup scheduled task under \\WGE\\ that re-runs this preset at every boot as SYSTEM. Think of it as a bouncer who clocks in every morning and quietly puts things back the way you like them - even after Windows tries to undo everything overnight.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["persistence", "scheduled-task"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "startupTask",
+            "taskPath": "\\WGE\\",
+            "taskName": "WGE-privacy-Persist",
+            "action": "Register",
+            "undoAction": "Remove"
+          }
+        ],
+        "enable": [
+          {
+            "type": "startupTask",
+            "taskPath": "\\WGE\\",
+            "taskName": "WGE-privacy-Persist",
+            "action": "Remove",
+            "undoAction": "Register"
+          }
+        ]
+      },
+      "notes": "The task runs under SYSTEM with Highest privilege level. You can inspect it in Task Scheduler under the \\WGE\\ folder. If you move the dist folder after applying, update the task's action path to match the new location."
     }
   ]
 }

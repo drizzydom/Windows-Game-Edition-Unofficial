@@ -377,6 +377,12 @@ function Invoke-WGECommand {
         'registry' {
             return Invoke-WGERegistryCommand -Manifest $Manifest -Tweak $Tweak -Command $Command -DryRun:$DryRun
         }
+        'gpupdate' {
+            return Invoke-WGEGpUpdateCommand -Manifest $Manifest -Tweak $Tweak -Command $Command -DryRun:$DryRun
+        }
+        'startupTask' {
+            return Invoke-WGEStartupTaskCommand -Manifest $Manifest -Tweak $Tweak -Command $Command -DryRun:$DryRun
+        }
         default {
             return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType $Command.type -Target $target -Action $Command.action -Message "Unsupported command type '$($Command.type)'" -Succeeded:$false -ErrorMessage:"Unsupported command type $($Command.type)." -DryRun:$DryRun
         }
@@ -401,6 +407,12 @@ function Get-WGECommandTarget {
             $path = if ($Command.path) { $Command.path } else { '<unknown hive>' }
             $valueName = if ($Command.name) { $Command.name } else { '(Default)' }
             return "reg:$path::$valueName"
+        }
+        'gpupdate' { return 'system:gpupdate /force' }
+        'startupTask' {
+            $sTaskPath = if ($Command.taskPath) { $Command.taskPath } else { '\WGE\' }
+            $sTaskName = if ($Command.taskName) { $Command.taskName } else { 'WGE-Persist' }
+            return "task:$sTaskPath$sTaskName"
         }
         default { return $Command.name }
     }
@@ -458,6 +470,14 @@ function Invoke-WGEServiceCommand {
                     $messageParts += $prepMessage
                 }
 
+                # Defeat Windows auto-recovery restart. If the SCM was set to restart the service
+                # on failure, this clears that so it stays dead. "Reset after 1 day, do nothing on
+                # failure x3." Basically telling Windows to take a chill pill. 😎
+                try {
+                    & sc.exe failure $name reset= 86400 actions= none/0/none/0/none/0 2>&1 | Out-Null
+                }
+                catch { <# best-effort; the service is already stopped and that's the main goal #> }
+
                 return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'service' -Target $name -Action 'Stop' -Message ($messageParts -join ' ') -UndoAction $Command.undoAction -UndoData $undoData -DryRun:$DryRun
             }
             catch {
@@ -483,6 +503,27 @@ function Invoke-WGEServiceCommand {
             }
             try {
                 Set-Service -Name $name -StartupType $Command.startupType -ErrorAction Stop
+
+                # Belt AND suspenders: write Start=4 directly to the service registry key.
+                # Set-Service is polite PowerShell-land. This speaks directly to the SCM in
+                # its native tongue. Critically it defeats trigger-based auto-start - a sneaky
+                # trick that Xbox and telemetry services love to use to wake themselves back up
+                # (e.g. plug in a controller, boom, XboxGipSvc is back). Not today, pal.
+                if ($Command.startupType -eq 'Disabled') {
+                    $svcRegPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$name"
+                    if (Test-Path -Path $svcRegPath -ErrorAction SilentlyContinue) {
+                        try {
+                            Set-ItemProperty -Path $svcRegPath -Name 'Start' -Value 4 -Type DWord -Force -ErrorAction Stop
+                            # Also clear DelayedAutoStart in case it was set - we want 'Disabled',
+                            # not 'Disabled but actually delayed-auto'. Windows is creative like that.
+                            Set-ItemProperty -Path $svcRegPath -Name 'DelayedAutoStart' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+                        }
+                        catch {
+                            Write-Verbose "Direct registry hardening for '$name' skipped: $($_.Exception.Message)"
+                        }
+                    }
+                }
+
                 return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'service' -Target $name -Action 'SetStartup' -Message "Set service $name startup to $($Command.startupType)" -UndoAction $Command.undoAction -UndoData $undoData -DryRun:$DryRun
             }
             catch {
@@ -820,6 +861,33 @@ function Get-WGETweakStatus {
                     $checks += New-WGETweakCheckResult -CommandType 'registry' -Target $target -Desired $desiredDisplay -Actual 'Registry access failed' -Compliant:$false -Notes:$_.Exception.Message
                 }
             }
+            'gpupdate' {
+                # gpupdate is a one-shot action; there's no persistent state we can inspect afterward.
+                # We report it as always-compliant so it doesn't pollute the status view with false alarms.
+                $checks += New-WGETweakCheckResult -CommandType 'gpupdate' -Target 'system:gpupdate /force' `
+                    -Desired 'Run at apply time' -Actual 'Runs once on apply; no persistent state' `
+                    -Compliant:$true -Notes 'Group Policy refresh is a one-shot action; review service/registry rows above for real compliance.'
+            }
+            'startupTask' {
+                $sTaskPath2 = if ($command.taskPath) { $command.taskPath } else { '\WGE\' }
+                $sTaskName2 = if ($command.taskName) { $command.taskName } else { 'WGE-Persist' }
+                $sTarget2 = "task:$sTaskPath2$sTaskName2"
+                try {
+                    $persistTask = Get-ScheduledTask -TaskPath $sTaskPath2 -TaskName $sTaskName2 -ErrorAction Stop
+                    $sState2 = $persistTask.State.ToString()
+                    $sDesired2 = if ($command.action -eq 'Register') { 'Ready' } else { 'Not registered' }
+                    $sCompliant2 = if ($command.action -eq 'Register') { $persistTask.State -ne 'Disabled' } else { $false }
+                    $checks += New-WGETweakCheckResult -CommandType 'startupTask' -Target $sTarget2 `
+                        -Desired $sDesired2 -Actual $sState2 -Compliant:$sCompliant2 `
+                        -Notes 'Boot persistence task lives in Task Scheduler under \WGE\.'
+                }
+                catch {
+                    $sDesired2 = if ($command.action -eq 'Register') { 'Ready' } else { 'Not registered' }
+                    $sCompliant2 = ($command.action -ne 'Register')
+                    $checks += New-WGETweakCheckResult -CommandType 'startupTask' -Target $sTarget2 `
+                        -Desired $sDesired2 -Actual 'Not registered' -Compliant:$sCompliant2 -Notes ''
+                }
+            }
             default {
                 $checks += New-WGETweakCheckResult -CommandType $command.type -Target $target -Desired $command.action -Actual 'Status check unavailable' -Compliant:$false -Notes:'Command type not yet supported for status tracking.'
             }
@@ -1021,4 +1089,157 @@ function Export-WGEActionLog {
 
     return $destination
 }
+function Invoke-WGEGpUpdateCommand {
+    # Fires a non-blocking Group Policy refresh so that any registry changes under
+    # HKLM:\SOFTWARE\Policies\... are picked up by running processes right now,
+    # rather than waiting for Windows' lazy 90-minute background refresh. Come on Windows, chop chop!
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Manifest,
+
+        [Parameter(Mandatory)]
+        [pscustomobject]$Tweak,
+
+        [Parameter(Mandatory)]
+        [pscustomobject]$Command,
+
+        [bool]$DryRun = $false
+    )
+
+    $target = 'system:gpupdate /force'
+
+    if ($DryRun) {
+        return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'gpupdate' -Target $target `
+            -Action 'Run' -Message 'Would run: gpupdate /force /target:computer /wait:0' -DryRun:$true
+    }
+
+    try {
+        # /wait:0 makes this non-blocking - we fire and move on, because waiting for GP to
+        # apply during an apply run would be... a lot. /target:computer refreshes machine
+        # policies only (faster, and all we need - we're not touching user hive stuff).
+        $output = & gpupdate.exe /force /target:computer /wait:0 2>&1
+        $outputStr = ($output | Where-Object { $_ } | Out-String).Trim()
+        $message = if ($outputStr) { "Group Policy refresh triggered: $outputStr" } else { 'Group Policy refresh triggered.' }
+        return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'gpupdate' -Target $target `
+            -Action 'Run' -Message $message -DryRun:$DryRun
+    }
+    catch {
+        return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'gpupdate' -Target $target `
+            -Action 'Run' -Message 'Group Policy refresh failed - policy changes will apply on next GP cycle.' `
+            -Succeeded:$false -ErrorMessage:$_.Exception.Message -DryRun:$DryRun
+    }
+}
+
+function Invoke-WGEStartupTaskCommand {
+    # Registers (or removes) a scheduled task under \WGE\ that re-runs the active preset
+    # at every system startup as SYSTEM. This is the "permanence" magic - Windows Update may
+    # reset service startup types, but on the very next boot WGE quietly puts them back.
+    # Think of it as a bouncer who works 24/7 and never calls in sick. 💪
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [pscustomobject]$Manifest,
+
+        [Parameter(Mandatory)]
+        [pscustomobject]$Tweak,
+
+        [Parameter(Mandatory)]
+        [pscustomobject]$Command,
+
+        [bool]$DryRun = $false
+    )
+
+    # Derive preset name from the manifest file path (not metadata.id!) because wge.ps1
+    # maps -Preset to a filename. e.g. "privacy.json" -> -Preset privacy
+    $presetName = [System.IO.Path]::GetFileNameWithoutExtension($Manifest.SourcePath)
+    $taskName   = if ($Command.taskName) { $Command.taskName } else { "WGE-$presetName-Persist" }
+    $taskPath   = if ($Command.taskPath) { $Command.taskPath } else { '\WGE\' }
+    $target     = "task:$taskPath$taskName"
+
+    # Resolve path to wge.ps1 - module lives at {base}\Automation\modules\WGE.Core\
+    # so wge.ps1 is two levels up at {base}\Automation\wge.ps1
+    $scriptPath = Join-Path -Path $script:ModuleRoot -ChildPath '..\..\wge.ps1'
+    try {
+        $scriptPath = (Resolve-Path -Path $scriptPath -ErrorAction Stop).ProviderPath
+    }
+    catch {
+        return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'startupTask' `
+            -Target $target -Action $Command.action `
+            -Message 'Could not resolve wge.ps1 path - is the Automation folder intact?' `
+            -Succeeded:$false -ErrorMessage:$_.Exception.Message -DryRun:$DryRun
+    }
+
+    switch ($Command.action) {
+        'Register' {
+            if ($DryRun) {
+                return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'startupTask' `
+                    -Target $target -Action 'Register' `
+                    -Message "Would register startup task $taskPath$taskName -> wge.ps1 -Preset $presetName" `
+                    -UndoAction 'Remove' -DryRun:$true
+            }
+            try {
+                $psExe  = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+                $psArgs = "-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`" -Preset $presetName -SkipUnsupported"
+
+                $action    = New-ScheduledTaskAction -Execute $psExe -Argument $psArgs
+                $trigger   = New-ScheduledTaskTrigger -AtStartup
+                $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -RunLevel Highest -LogonType ServiceAccount
+                $settings  = New-ScheduledTaskSettingsSet `
+                    -ExecutionTimeLimit (New-TimeSpan -Minutes 10) `
+                    -MultipleInstances IgnoreNew `
+                    -StartWhenAvailable `
+                    -DisallowStartIfOnBatteries:$false `
+                    -StopIfGoingOnBatteries:$false
+
+                Register-ScheduledTask `
+                    -TaskName $taskName -TaskPath $taskPath `
+                    -Action $action -Trigger $trigger -Principal $principal -Settings $settings `
+                    -Description "WGE boot-time re-apply for preset '$presetName'. Managed by Windows Game Edition - do not edit manually." `
+                    -Force -ErrorAction Stop | Out-Null
+
+                return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'startupTask' `
+                    -Target $target -Action 'Register' `
+                    -Message "Registered startup persistence task $taskPath$taskName. Changes will survive reboots and Windows Update interference." `
+                    -UndoAction 'Remove' -DryRun:$DryRun
+            }
+            catch {
+                return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'startupTask' `
+                    -Target $target -Action 'Register' `
+                    -Message "Failed to register startup task $taskPath$taskName" `
+                    -Succeeded:$false -ErrorMessage:$_.Exception.Message -UndoAction 'Remove' -DryRun:$DryRun
+            }
+        }
+        'Remove' {
+            if ($DryRun) {
+                return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'startupTask' `
+                    -Target $target -Action 'Remove' `
+                    -Message "Would remove startup persistence task $taskPath$taskName" `
+                    -UndoAction 'Register' -DryRun:$true
+            }
+            try {
+                Unregister-ScheduledTask -TaskName $taskName -TaskPath $taskPath -Confirm:$false -ErrorAction Stop
+                return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'startupTask' `
+                    -Target $target -Action 'Remove' `
+                    -Message "Removed startup persistence task $taskPath$taskName. Changes will no longer be re-applied at boot." `
+                    -UndoAction 'Register' -DryRun:$DryRun
+            }
+            catch {
+                # Task may not exist (already removed or never created) - that's perfectly fine!
+                # We treat this as a success because the desired end state (task not present) is met.
+                return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'startupTask' `
+                    -Target $target -Action 'Remove' `
+                    -Message "Startup task $taskPath$taskName was not found (already removed or never registered)." `
+                    -UndoAction 'Register' -DryRun:$DryRun
+            }
+        }
+        default {
+            return New-WGEActionRecord -Manifest $Manifest -Tweak $Tweak -CommandType 'startupTask' `
+                -Target $target -Action $Command.action `
+                -Message "Unsupported startupTask action '$($Command.action)'" `
+                -Succeeded:$false -ErrorMessage:"Unsupported startupTask action $($Command.action)." -DryRun:$DryRun
+        }
+    }
+}
+
 $script:ManifestSchemaVersion = '0.1.0'

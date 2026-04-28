@@ -208,6 +208,43 @@
         ]
       },
       "notes": "Re-enable before using Xbox party chat or Game Streaming features from the Xbox app."
+    },
+    {
+      "id": "xbox-persist",
+      "name": "Boot Persistence",
+      "category": "System",
+      "supportedSkus": {
+        "include": ["all"],
+        "exclude": []
+      },
+      "defaultBehavior": "Xbox services use trigger-based auto-start. Even after disabling them, events like plugging in an Xbox controller or launching a Game Pass title can cause Windows to wake them back up automatically.",
+      "whenDisabled": "Registers a startup scheduled task under \\WGE\\ that re-disables Xbox services at every boot. Combined with the direct registry hardening applied during disable, this makes sure those services stay off regardless of trigger events.",
+      "riskLevel": "low",
+      "requiresReboot": false,
+      "requiresElevation": true,
+      "tags": ["persistence", "scheduled-task"],
+      "dependencies": [],
+      "commands": {
+        "disable": [
+          {
+            "type": "startupTask",
+            "taskPath": "\\WGE\\",
+            "taskName": "WGE-xbox-Persist",
+            "action": "Register",
+            "undoAction": "Remove"
+          }
+        ],
+        "enable": [
+          {
+            "type": "startupTask",
+            "taskPath": "\\WGE\\",
+            "taskName": "WGE-xbox-Persist",
+            "action": "Remove",
+            "undoAction": "Register"
+          }
+        ]
+      },
+      "notes": "Visible in Task Scheduler under \\WGE\\. Re-applying after a dist folder move will update the stored script path in the task definition."
     }
   ]
 }
